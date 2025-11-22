@@ -1,0 +1,9 @@
+# Include base requirements
+-r requirements.txt
+
+# Additional Development Tools
+ipython>=8.14.0
+jupyter-contrib-nbextensions>=0.7.0
+autopep8>=2.0.0
+pylint>=3.0.0
+bandit>=1.7.5
