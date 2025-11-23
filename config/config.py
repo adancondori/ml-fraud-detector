@@ -61,6 +61,44 @@ class Settings(BaseSettings):
     # Database (optional)
     database_url: Optional[str] = None
 
+    # Business Metrics (CRÍTICO para detección de fraude)
+    fraud_cost_per_transaction: float = 100.0
+    false_positive_cost: float = 5.0
+    review_capacity_per_day: int = 1000
+    precision_target: float = Field(default=0.80, ge=0.0, le=1.0)
+    recall_target: float = Field(default=0.70, ge=0.0, le=1.0)
+    auto_decline_threshold: float = Field(default=0.95, ge=0.0, le=1.0)
+
+    # Class Balancing
+    use_smote: bool = True
+    smote_sampling_strategy: float = Field(default=0.5, ge=0.0, le=1.0)
+    use_class_weights: bool = True
+
+    # Temporal Validation
+    use_temporal_split: bool = True
+    temporal_split_date: Optional[str] = "2024-01-01"
+    embargo_days: int = Field(default=7, ge=0)
+
+    # Feature Engineering
+    aggregation_windows: str = "1,7,30"  # días
+    velocity_windows: str = "1,6,24"  # horas
+    min_transactions_for_aggregation: int = 5
+
+    # Monitoring
+    enable_drift_detection: bool = True
+    drift_threshold: float = Field(default=0.1, ge=0.0, le=1.0)
+    performance_degradation_threshold: float = Field(default=0.05, ge=0.0, le=1.0)
+
+    @property
+    def aggregation_windows_list(self) -> list[int]:
+        """Get aggregation windows as list of integers."""
+        return [int(x.strip()) for x in self.aggregation_windows.split(',')]
+
+    @property
+    def velocity_windows_list(self) -> list[int]:
+        """Get velocity windows as list of integers."""
+        return [int(x.strip()) for x in self.velocity_windows.split(',')]
+
     @field_validator("data_dir", "models_dir", "logs_dir", mode="before")
     @classmethod
     def resolve_path(cls, v: str | Path) -> Path:

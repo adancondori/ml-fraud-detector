@@ -26,9 +26,23 @@ requests>=2.31.0
 
 # Data Validation
 great-expectations>=0.18.0
+pandera>=0.17.0
 
 # Logging
 loguru>=0.7.0
+
+# Explainability (CRÍTICO para fraude)
+shap>=0.42.0
+lime>=0.2.0.1
+
+# Hyperparameter Optimization
+optuna>=3.4.0
+
+# Feature Engineering
+category-encoders>=2.6.0
+
+# Monitoring & Drift Detection
+evidently>=0.4.0
 
 # Development & Code Quality
 pytest>=7.4.0
