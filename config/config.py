@@ -2,8 +2,10 @@
 Configuration management using Pydantic Settings.
 Loads from .env file and provides type-safe configuration access.
 """
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +62,15 @@ class Settings(BaseSettings):
 
     # Database (optional)
     database_url: Optional[str] = None
+
+    # ClickHouse Configuration
+    clickhouse_host: str = "localhost"
+    clickhouse_port: int = Field(default=9000, ge=1, le=65535)
+    clickhouse_user: str = "default"
+    clickhouse_password: str = ""
+    clickhouse_database: str = Field(default="default", description="ClickHouse database name")
+    clickhouse_table: str = Field(default="payments", description="ClickHouse table name")
+    clickhouse_secure: bool = False
 
     # Business Metrics (CRÍTICO para detección de fraude)
     fraud_cost_per_transaction: float = 100.0

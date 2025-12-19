@@ -2,8 +2,10 @@
 Data loading utilities for fraud detection.
 Supports CSV, Parquet, and other formats with validation.
 """
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, List
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -84,7 +86,7 @@ class DataLoader:
     @staticmethod
     def validate_required_columns(
         df: pd.DataFrame,
-        required_columns: list[str]
+        required_columns: List[str]
     ) -> None:
         """
         Validate that required columns exist in DataFrame.
