@@ -1,192 +1,223 @@
 """
-Data loading utilities for fraud detection.
-Supports CSV, Parquet, and other formats with validation.
+DataManager — Facade for data extraction, validation, proxy labeling and I/O.
+
+SOLID decomposition (SRP):
+  - DataManager: facade/orchestrator
+  - _validate_extraction: validation logic
+  - _downcast: memory optimization
+  - _save_manifest: manifest writing
+  - assign_proxy_labels: static proxy labeling
+
+DIP: ClickHouse extractor injected via constructor for testability.
 """
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Tuple, Union, List
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
+from loguru import logger
 
-from config.config import settings
-from fraud_detector.utils.logger import logger
+if TYPE_CHECKING:
+    from config.config import Settings
+
+# ── Constants ────────────────────────────────────────────────────
+
+REQUIRED_NON_NULL = ["id", "user_id", "facility_id", "reservation_paid_out", "created_at", "status"]
+SAFE_INT32_COLS = ["user_id", "facility_id"]
+SAFE_FLOAT32_COLS = ["reservation_paid_out", "tax", "tip", "discount"]
+
+CANONICAL_SQL = """
+SELECT
+    id,
+    user_id,
+    facility_id,
+    facility_name,
+    created_at,
+    captured_at,
+    payment_method,
+    gateway,
+    source_enum,
+    status,
+    reservation_paid_out,
+    discount,
+    tax,
+    tip,
+    card_brand,
+    currency,
+    paid_by_manager,
+    reversed_id,
+    debit_refund,
+    _peerdb_version
+FROM {database}.{table} FINAL
+WHERE created_at >= %(start)s
+  AND created_at < %(end)s
+  AND payment_method != 'reversal'
+  AND payment_method != 'free'
+  AND user_id != 0
+  AND _peerdb_is_deleted = 0
+ORDER BY created_at, id
+"""
+
+SPLIT_DEFINITIONS = {
+    "warm":  ("warm_start",  "train_start"),
+    "train": ("train_start", "train_end"),
+    "val":   ("train_end",   "val_end"),
+    "test":  ("val_end",     "test_end"),
+}
 
 
-class DataLoader:
-    """Handle data loading and basic validation."""
+class DataManager:
+    """Orchestrates data extraction, validation, and I/O.
 
-    @staticmethod
-    def load_csv(
-        file_path: str | Path,
-        parse_dates: Optional[list] = None,
-        **kwargs
-    ) -> pd.DataFrame:
-        """
-        Load data from CSV file.
+    Usage:
+        dm = DataManager(settings)
+        dm.extract_from_clickhouse()
+        train, val, test = dm.load_splits()
+    """
 
-        Args:
-            file_path: Path to CSV file
-            parse_dates: List of columns to parse as dates
-            **kwargs: Additional arguments for pd.read_csv
+    def __init__(self, settings: "Settings", extractor=None):
+        self._settings = settings
+        self._extractor = extractor
 
-        Returns:
-            Loaded DataFrame
-        """
-        file_path = Path(file_path)
-        logger.info(f"Loading CSV file: {file_path}")
+    def _get_extractor(self):
+        if self._extractor is not None:
+            return self._extractor
+        from fraud_detector.data.clickhouse_connector import ClickHouseConnector
+        self._extractor = ClickHouseConnector(
+            host=self._settings.clickhouse_host,
+            port=self._settings.clickhouse_port,
+            user=self._settings.clickhouse_user,
+            password=self._settings.clickhouse_password,
+            database=self._settings.clickhouse_database,
+            secure=self._settings.clickhouse_secure,
+        )
+        return self._extractor
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+    # ── Extraction ───────────────────────────────────────────────
 
-        df = pd.read_csv(file_path, parse_dates=parse_dates, **kwargs)
-        logger.info(f"Loaded {len(df):,} rows and {len(df.columns)} columns")
+    def extract_from_clickhouse(self, splits: Optional[List[str]] = None) -> None:
+        if splits is None:
+            splits = list(SPLIT_DEFINITIONS.keys())
 
+        self._settings.ensure_directories()
+        extractor = self._get_extractor()
+        db = self._settings.clickhouse_database
+        table = self._settings.clickhouse_table
+        query = CANONICAL_SQL.format(database=db, table=table)
+
+        for name in splits:
+            start_attr, end_attr = SPLIT_DEFINITIONS[name]
+            start = getattr(self._settings, start_attr)
+            end = getattr(self._settings, end_attr)
+
+            logger.info(f"Extracting {name}: {start} to {end}")
+            df = extractor.query_df(query, parameters={"start": start, "end": end})
+
+            df = df[df["user_id"] > 0]
+            if "_peerdb_is_deleted" in df.columns:
+                df = df[df["_peerdb_is_deleted"] == 0]
+                df = df.drop(columns=["_peerdb_is_deleted"], errors="ignore")
+            df = df.drop(columns=["is_fraud"], errors="ignore")
+
+            self._validate_extraction(df, name)
+            df = self._downcast(df)
+
+            target = self._settings.processed_dir / f"{name}_raw.parquet"
+            tmp = target.with_suffix(".tmp.parquet")
+            df.to_parquet(tmp, engine="pyarrow", compression="snappy", index=False)
+            tmp.rename(target)
+            logger.info(f"Saved {name}: {len(df):,} rows -> {target}")
+
+            manifest_path = self._settings.manifests_dir / f"{name}_manifest.json"
+            self._save_manifest(name, start, end, df, manifest_path)
+
+        sql_path = self._settings.manifests_dir / "query_snapshot.sql"
+        sql_path.write_text(query)
+
+    # ── Validation ───────────────────────────────────────────────
+
+    def _validate_extraction(self, df: pd.DataFrame, name: str) -> None:
+        missing = [c for c in REQUIRED_NON_NULL if c not in df.columns]
+        if missing:
+            raise ValueError(f"Split '{name}': missing required columns: {missing}")
+
+        for col in REQUIRED_NON_NULL:
+            null_count = df[col].isna().sum()
+            if null_count > 0:
+                raise ValueError(f"Split '{name}': {null_count} NULLs in column '{col}'")
+
+        bad_users = (df["user_id"] <= 0).sum()
+        if bad_users > 0:
+            raise ValueError(f"Split '{name}': {bad_users} rows with user_id <= 0")
+
+        dup_count = df["id"].duplicated().sum()
+        if dup_count > 0:
+            dup_pct = dup_count / len(df) * 100
+            if dup_pct > 0.01:
+                raise ValueError(f"Split '{name}': {dup_count} duplicate IDs ({dup_pct:.4f}%)")
+            logger.warning(f"Split '{name}': {dup_count} duplicate IDs — deduplicating")
+            df.drop_duplicates(subset=["id"], keep="last", inplace=True)
+
+        logger.info(f"Validated {name}: {len(df):,} rows, memory={df.memory_usage(deep=True).sum()/1e6:.1f} MB")
+
+    # ── Downcast ─────────────────────────────────────────────────
+
+    def _downcast(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        for col in SAFE_FLOAT32_COLS:
+            if col in df.columns and df[col].dtype == np.float64:
+                df[col] = df[col].astype(np.float32)
+        for col in SAFE_INT32_COLS:
+            if col in df.columns:
+                max_val = df[col].max()
+                if max_val < 2**31 - 1:
+                    df[col] = df[col].astype(np.int32)
         return df
 
-    @staticmethod
-    def load_parquet(file_path: str | Path) -> pd.DataFrame:
-        """
-        Load data from Parquet file.
-
-        Args:
-            file_path: Path to Parquet file
-
-        Returns:
-            Loaded DataFrame
-        """
-        file_path = Path(file_path)
-        logger.info(f"Loading Parquet file: {file_path}")
-
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        df = pd.read_parquet(file_path)
-        logger.info(f"Loaded {len(df):,} rows and {len(df.columns)} columns")
-
-        return df
+    # ── Proxy labeling ───────────────────────────────────────────
 
     @staticmethod
-    def save_parquet(df: pd.DataFrame, file_path: str | Path) -> None:
-        """
-        Save DataFrame to Parquet format.
+    def assign_proxy_labels(df: pd.DataFrame, proxy_type: str) -> pd.Series:
+        if proxy_type == "strict":
+            statuses = ["totally_refunded", "refunded_to_credit"]
+        elif proxy_type == "wide":
+            statuses = ["totally_refunded", "refunded_to_credit", "partially_refunded"]
+        else:
+            raise ValueError(f"Invalid proxy_type='{proxy_type}'. Must be 'strict' or 'wide'.")
+        return df["status"].isin(statuses).astype(np.int8)
 
-        Args:
-            df: DataFrame to save
-            file_path: Output file path
-        """
-        file_path = Path(file_path)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+    # ── Manifest ─────────────────────────────────────────────────
 
-        logger.info(f"Saving {len(df):,} rows to: {file_path}")
-        df.to_parquet(file_path, index=False, compression="snappy")
-        logger.info("Data saved successfully")
-
-    @staticmethod
-    def validate_required_columns(
-        df: pd.DataFrame,
-        required_columns: List[str]
-    ) -> None:
-        """
-        Validate that required columns exist in DataFrame.
-
-        Args:
-            df: DataFrame to validate
-            required_columns: List of required column names
-
-        Raises:
-            ValueError: If required columns are missing
-        """
-        missing_columns = set(required_columns) - set(df.columns)
-        if missing_columns:
-            raise ValueError(f"Missing required columns: {missing_columns}")
-
-        logger.info("All required columns present")
-
-    @staticmethod
-    def get_data_info(df: pd.DataFrame) -> dict:
-        """
-        Get summary information about the DataFrame.
-
-        Args:
-            df: DataFrame to analyze
-
-        Returns:
-            Dictionary with data information
-        """
-        info = {
-            "n_rows": len(df),
-            "n_columns": len(df.columns),
+    def _save_manifest(self, name: str, start: str, end: str, df: pd.DataFrame, path: Path) -> None:
+        manifest = {
+            "name": name,
+            "start_date": start,
+            "end_date": end,
+            "row_count": len(df),
+            "extracted_at": datetime.now(timezone.utc).isoformat(),
             "columns": list(df.columns),
-            "dtypes": df.dtypes.to_dict(),
-            "memory_usage_mb": df.memory_usage(deep=True).sum() / 1024**2,
-            "missing_values": df.isnull().sum().to_dict(),
-            "missing_percentage": (df.isnull().sum() / len(df) * 100).to_dict(),
+            "status_distribution": df["status"].value_counts().to_dict() if "status" in df.columns else {},
+            "memory_mb": round(df.memory_usage(deep=True).sum() / 1e6, 1),
         }
+        path.write_text(json.dumps(manifest, indent=2, default=str))
 
-        logger.info(f"Dataset info: {info['n_rows']:,} rows, {info['n_columns']} columns")
-        logger.info(f"Memory usage: {info['memory_usage_mb']:.2f} MB")
+    # ── Loading ──────────────────────────────────────────────────
 
-        return info
+    def load_splits(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        return self.load_split("train"), self.load_split("val"), self.load_split("test")
 
+    def load_split(self, name: str) -> pd.DataFrame:
+        path = self._settings.processed_dir / f"{name}_raw.parquet"
+        if not path.exists():
+            raise FileNotFoundError(f"Split '{name}' not found at {path}. Run extract_from_clickhouse() first.")
+        df = pd.read_parquet(path, engine="pyarrow")
+        logger.info(f"Loaded {name}: {len(df):,} rows")
+        return df
 
-def split_data(
-    df: pd.DataFrame,
-    target_col: str,
-    test_size: Optional[float] = None,
-    val_size: Optional[float] = None,
-    stratify: bool = True,
-    random_state: Optional[int] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Split data into train, validation, and test sets.
-
-    Args:
-        df: Input DataFrame
-        target_col: Name of target column
-        test_size: Proportion of test set (uses settings if None)
-        val_size: Proportion of validation set (uses settings if None)
-        stratify: Whether to stratify split by target
-        random_state: Random seed (uses settings if None)
-
-    Returns:
-        Tuple of (train_df, val_df, test_df)
-    """
-    test_size = test_size or settings.test_size
-    val_size = val_size or settings.validation_size
-    random_state = random_state or settings.random_seed
-
-    logger.info(f"Splitting data: test={test_size}, val={val_size}")
-
-    # First split: train+val / test
-    stratify_col = df[target_col] if stratify else None
-
-    train_val_df, test_df = train_test_split(
-        df,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=stratify_col,
-    )
-
-    # Second split: train / val
-    val_size_adjusted = val_size / (1 - test_size)
-    stratify_col_train = train_val_df[target_col] if stratify else None
-
-    train_df, val_df = train_test_split(
-        train_val_df,
-        test_size=val_size_adjusted,
-        random_state=random_state,
-        stratify=stratify_col_train,
-    )
-
-    logger.info(f"Train: {len(train_df):,} | Val: {len(val_df):,} | Test: {len(test_df):,}")
-
-    # Log class distribution
-    if target_col in df.columns:
-        logger.info("Class distribution:")
-        logger.info(f"  Train: {train_df[target_col].value_counts().to_dict()}")
-        logger.info(f"  Val: {val_df[target_col].value_counts().to_dict()}")
-        logger.info(f"  Test: {test_df[target_col].value_counts().to_dict()}")
-
-    return train_df, val_df, test_df
+    def close(self):
+        if self._extractor is not None and hasattr(self._extractor, "close"):
+            self._extractor.close()
