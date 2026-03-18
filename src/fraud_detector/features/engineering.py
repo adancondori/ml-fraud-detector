@@ -1,404 +1,459 @@
 """
-Feature engineering específico para detección de fraude.
+Feature Engineering — Catálogo oficial de 20 features.
 
-Este módulo implementa features críticos para detectar patrones de fraude:
-- Temporal features
-- Aggregation features
-- Velocity features
-- Behavioral features
+Implementa el patrón Strategy (FeatureGroup) + Compositor (FeatureEngineer)
+para separar responsabilidades por grupo y facilitar tests unitarios por grupo.
+
+Catálogo:
+  Grupo 1 Transaccionales (#1-5):   amount, log_amount, amount_usd_ratio,
+                                     discount_ratio, has_tip
+  Grupo 2 Temporales      (#6-10):  hour_sin, hour_cos, day_of_week,
+                                     is_weekend, is_off_hours
+  Grupo 3 Velocidad       (#11-14): user_txn_count_1h, user_txn_count_24h,
+                                     time_since_last_txn, user_amount_24h
+  Grupo 4 Comportamental  (#15-18): user_distinct_facilities_cumul,
+                                     user_distinct_methods,
+                                     user_reversal_ratio_30d,
+                                     user_account_age_days
+  Grupo 5 Contextual      (#19-20): facility_avg_amount, amount_facility_ratio
+
+Regla anti-leakage obligatoria:
+  - DataFrame ordenado por (user_id, created_at) antes de rolling/cumulative.
+  - Ninguna ventana usa información de la fila actual ni del futuro.
+  - Estadísticas fit() sólo en train; transform() las aplica sin reaprender.
 """
-from datetime import datetime, timedelta
-from typing import List, Optional
+from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from typing import Dict, List, Optional
+
+import joblib
 import numpy as np
 import pandas as pd
 
-from config.config import settings
 from fraud_detector.utils.logger import logger
 
+# ── Catálogo oficial ─────────────────────────────────────────────────────────
 
-class FraudFeatureEngineer:
-    """
-    Ingeniero de features específico para detección de fraude.
+FEATURE_NAMES: List[str] = [
+    # Grupo 1: Transaccionales
+    "amount",
+    "log_amount",
+    "amount_usd_ratio",
+    "discount_ratio",
+    "has_tip",
+    # Grupo 2: Temporales
+    "hour_sin",
+    "hour_cos",
+    "day_of_week",
+    "is_weekend",
+    "is_off_hours",
+    # Grupo 3: Velocidad
+    "user_txn_count_1h",
+    "user_txn_count_24h",
+    "time_since_last_txn",
+    "user_amount_24h",
+    # Grupo 4: Comportamentales
+    "user_distinct_facilities_cumul",
+    "user_distinct_methods",
+    "user_reversal_ratio_30d",
+    "user_account_age_days",
+    # Grupo 5: Contextuales
+    "facility_avg_amount",
+    "amount_facility_ratio",
+]
 
-    Features implementados:
-    1. Temporal: hora del día, día de la semana, festivos
-    2. Aggregations: stats por usuario en ventanas de tiempo
-    3. Velocity: velocidad de transacciones
-    4. Behavioral: desviaciones del comportamiento normal
-    """
+if len(FEATURE_NAMES) != 20:
+    raise ValueError(f"FEATURE_NAMES debe tener 20 elementos, tiene {len(FEATURE_NAMES)}")
 
-    def __init__(
-        self,
-        user_col: str = "user_id",
-        timestamp_col: str = "timestamp",
-        amount_col: str = "amount",
-        merchant_col: Optional[str] = "merchant_id",
-    ):
-        """
-        Inicializa el feature engineer.
+FEATURE_NAMES_19: List[str] = [f for f in FEATURE_NAMES if f != "user_reversal_ratio_30d"]
 
-        Args:
-            user_col: Nombre de columna de usuario
-            timestamp_col: Nombre de columna de timestamp
-            amount_col: Nombre de columna de monto
-            merchant_col: Nombre de columna de comerciante
-        """
-        self.user_col = user_col
-        self.timestamp_col = timestamp_col
-        self.amount_col = amount_col
-        self.merchant_col = merchant_col
+if len(FEATURE_NAMES_19) != 19:
+    raise ValueError(f"FEATURE_NAMES_19 debe tener 19 elementos, tiene {len(FEATURE_NAMES_19)}")
 
-        logger.info("FraudFeatureEngineer inicializado")
+# Columnas de metadata que viajan junto a las features
+METADATA_COLS: List[str] = ["id", "user_id", "facility_id", "created_at", "status"]
 
-    def create_temporal_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Crea features temporales.
 
-        Features:
-        - hour_of_day: Hora del día (0-23)
-        - day_of_week: Día de la semana (0-6)
-        - is_weekend: Si es fin de semana
-        - is_night: Si es de noche (10pm-6am)
-        - is_early_morning: Si es madrugada (12am-6am)
-        """
-        df = df.copy()
+# ── Interfaz base ─────────────────────────────────────────────────────────────
 
-        logger.info("Creando features temporales...")
+class FeatureGroup(ABC):
+    """Interfaz base para grupos de features."""
 
-        # Asegurar que timestamp es datetime
-        if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_col]):
-            df[self.timestamp_col] = pd.to_datetime(df[self.timestamp_col])
+    @abstractmethod
+    def fit(self, df_train: pd.DataFrame) -> "FeatureGroup":
+        """Aprende estadísticas del training set."""
+        ...
 
-        # Hora del día
-        df["hour_of_day"] = df[self.timestamp_col].dt.hour
+    @abstractmethod
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Agrega columnas de features al DataFrame. No muta el input."""
+        ...
 
-        # Día de la semana (0=Lunes, 6=Domingo)
-        df["day_of_week"] = df[self.timestamp_col].dt.dayofweek
+    @abstractmethod
+    def feature_names(self) -> List[str]:
+        """Retorna los nombres de features que genera este grupo."""
+        ...
 
-        # Fin de semana
-        df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
 
-        # Noche (10pm - 6am) - alto riesgo de fraude
-        df["is_night"] = ((df["hour_of_day"] >= 22) | (df["hour_of_day"] < 6)).astype(
-            int
+# ── Grupo 1: Transaccionales ─────────────────────────────────────────────────
+
+class TransactionalFeatures(FeatureGroup):
+    """Features #1-5: transformaciones aritméticas sobre montos."""
+
+    def __init__(self) -> None:
+        self._global_avg_amount: Optional[float] = None
+
+    def fit(self, df_train: pd.DataFrame) -> "TransactionalFeatures":
+        self._global_avg_amount = float(df_train["amount"].mean())
+        logger.debug(f"TransactionalFeatures.fit — global_avg_amount={self._global_avg_amount:.4f}")
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self._global_avg_amount is None:
+            raise RuntimeError("Llamar fit() antes de transform()")
+        out = df.copy()
+        out["log_amount"] = np.log1p(out["amount"])
+        out["amount_usd_ratio"] = out["amount"] / self._global_avg_amount
+        out["discount_ratio"] = out["discount"] / (out["amount"] + 1e-8)
+        out["has_tip"] = (out["tip"] > 0).astype(np.int8)
+        return out
+
+    def feature_names(self) -> List[str]:
+        return ["amount", "log_amount", "amount_usd_ratio", "discount_ratio", "has_tip"]
+
+
+# ── Grupo 2: Temporales ──────────────────────────────────────────────────────
+
+class TemporalFeatures(FeatureGroup):
+    """Features #6-10: codificación cíclica y flags temporales."""
+
+    def fit(self, df_train: pd.DataFrame) -> "TemporalFeatures":
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        hour = out["created_at"].dt.hour
+        dow = out["created_at"].dt.dayofweek + 1  # 1=Lunes … 7=Domingo (ISO)
+
+        out["hour_sin"] = np.sin(2 * np.pi * hour / 24)
+        out["hour_cos"] = np.cos(2 * np.pi * hour / 24)
+        out["day_of_week"] = dow.astype(np.int8)
+        out["is_weekend"] = (dow >= 6).astype(np.int8)
+        out["is_off_hours"] = hour.isin([23, 0, 1, 2, 3, 4, 5, 6]).astype(np.int8)
+        return out
+
+    def feature_names(self) -> List[str]:
+        return ["hour_sin", "hour_cos", "day_of_week", "is_weekend", "is_off_hours"]
+
+
+# ── Grupo 3: Velocidad ────────────────────────────────────────────────────────
+
+class VelocityFeatures(FeatureGroup):
+    """Features #11-14: rolling windows con exclusión de la fila actual."""
+
+    def fit(self, df_train: pd.DataFrame) -> "VelocityFeatures":
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        out = df.copy()
+        out["user_txn_count_1h"] = self._rolling_count(out, "1h")
+        out["user_txn_count_24h"] = self._rolling_count(out, "24h")
+        out["time_since_last_txn"] = self._time_since_last(out)
+        out["user_amount_24h"] = self._rolling_amount_sum(out, "24h")
+        return out
+
+    @staticmethod
+    def _rolling_count(df: pd.DataFrame, window: str) -> pd.Series:
+        """Conteo de transacciones del usuario en la ventana, excluyendo la fila actual."""
+        result = (
+            df.groupby("user_id")
+            .rolling(window, on="created_at")["id"]
+            .count()
+            .droplevel(0)
         )
+        return (result - 1).reindex(df.index).fillna(0).astype(np.float32)
 
-        # Madrugada (12am - 6am) - muy alto riesgo
-        df["is_early_morning"] = ((df["hour_of_day"] >= 0) & (df["hour_of_day"] < 6)).astype(
-            int
+    @staticmethod
+    def _rolling_amount_sum(df: pd.DataFrame, window: str) -> pd.Series:
+        """Suma de amount del usuario en la ventana, excluyendo el monto propio."""
+        result = (
+            df.groupby("user_id")
+            .rolling(window, on="created_at")["amount"]
+            .sum()
+            .droplevel(0)
+            .reset_index(drop=True)  # alinear por posición, no por timestamp
         )
+        return pd.Series(
+            result.values - df["amount"].values, index=df.index
+        ).fillna(0).clip(lower=0).astype(np.float32)
 
-        # Día del mes
-        df["day_of_month"] = df[self.timestamp_col].dt.day
-
-        # Mes
-        df["month"] = df[self.timestamp_col].dt.month
-
-        logger.info(f"✅ Creadas 7 features temporales")
-
-        return df
-
-    def create_aggregation_features(
-        self, df: pd.DataFrame, windows: Optional[List[int]] = None
-    ) -> pd.DataFrame:
-        """
-        Crea features de agregación por usuario en ventanas de tiempo.
-
-        Args:
-            df: DataFrame con transacciones
-            windows: Lista de ventanas en días (default: [1, 7, 30])
-
-        Features por ventana:
-        - n_transactions_{window}d: Número de transacciones
-        - total_amount_{window}d: Monto total
-        - mean_amount_{window}d: Monto promedio
-        - std_amount_{window}d: Desviación estándar del monto
-        - max_amount_{window}d: Monto máximo
-        """
-        df = df.copy()
-
-        if windows is None:
-            windows = settings.aggregation_windows_list
-
-        logger.info(f"Creando features de agregación para ventanas: {windows} días")
-
-        # Asegurar que está ordenado por timestamp
-        df = df.sort_values([self.user_col, self.timestamp_col])
-
-        # Asegurar que timestamp es datetime
-        if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_col]):
-            df[self.timestamp_col] = pd.to_datetime(df[self.timestamp_col])
-
-        features_created = 0
-
-        for window_days in windows:
-            logger.debug(f"  Procesando ventana de {window_days} días...")
-
-            # Timestamp de corte
-            df[f"_cutoff_{window_days}d"] = df[self.timestamp_col] - timedelta(
-                days=window_days
-            )
-
-            # Agrupar por usuario
-            for user_id in df[self.user_col].unique():
-                user_mask = df[self.user_col] == user_id
-                user_data = df[user_mask].copy()
-
-                for idx, row in user_data.iterrows():
-                    # Transacciones en la ventana
-                    window_mask = (
-                        (user_data[self.timestamp_col] >= row[f"_cutoff_{window_days}d"])
-                        & (user_data[self.timestamp_col] < row[self.timestamp_col])
-                    )
-
-                    window_txns = user_data[window_mask]
-
-                    # Número de transacciones
-                    df.loc[idx, f"n_transactions_{window_days}d"] = len(window_txns)
-
-                    if len(window_txns) >= settings.min_transactions_for_aggregation:
-                        # Monto total
-                        df.loc[idx, f"total_amount_{window_days}d"] = window_txns[
-                            self.amount_col
-                        ].sum()
-
-                        # Monto promedio
-                        df.loc[idx, f"mean_amount_{window_days}d"] = window_txns[
-                            self.amount_col
-                        ].mean()
-
-                        # Desviación estándar
-                        df.loc[idx, f"std_amount_{window_days}d"] = window_txns[
-                            self.amount_col
-                        ].std()
-
-                        # Monto máximo
-                        df.loc[idx, f"max_amount_{window_days}d"] = window_txns[
-                            self.amount_col
-                        ].max()
-                    else:
-                        # Valores por defecto si no hay suficientes transacciones
-                        df.loc[idx, f"total_amount_{window_days}d"] = 0
-                        df.loc[idx, f"mean_amount_{window_days}d"] = 0
-                        df.loc[idx, f"std_amount_{window_days}d"] = 0
-                        df.loc[idx, f"max_amount_{window_days}d"] = 0
-
-            # Limpiar columna temporal
-            df = df.drop(columns=[f"_cutoff_{window_days}d"])
-
-            features_created += 5  # 5 features por ventana
-
-        # Fill NaN con 0
-        agg_cols = [col for col in df.columns if any(f"_{w}d" in col for w in windows)]
-        df[agg_cols] = df[agg_cols].fillna(0)
-
-        logger.info(f"✅ Creadas {features_created} features de agregación")
-
-        return df
-
-    def create_velocity_features(
-        self, df: pd.DataFrame, windows: Optional[List[int]] = None
-    ) -> pd.DataFrame:
-        """
-        Crea features de velocidad de transacciones.
-
-        Args:
-            df: DataFrame con transacciones
-            windows: Lista de ventanas en horas (default: [1, 6, 24])
-
-        Features:
-        - transactions_per_hour_{window}h: Transacciones por hora
-        - amount_per_hour_{window}h: Monto por hora
-        """
-        df = df.copy()
-
-        if windows is None:
-            windows = settings.velocity_windows_list
-
-        logger.info(f"Creando features de velocidad para ventanas: {windows} horas")
-
-        # Asegurar que está ordenado por timestamp
-        df = df.sort_values([self.user_col, self.timestamp_col])
-
-        # Asegurar que timestamp es datetime
-        if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_col]):
-            df[self.timestamp_col] = pd.to_datetime(df[self.timestamp_col])
-
-        features_created = 0
-
-        for window_hours in windows:
-            logger.debug(f"  Procesando ventana de {window_hours} horas...")
-
-            # Timestamp de corte
-            df[f"_cutoff_{window_hours}h"] = df[self.timestamp_col] - timedelta(
-                hours=window_hours
-            )
-
-            # Agrupar por usuario
-            for user_id in df[self.user_col].unique():
-                user_mask = df[self.user_col] == user_id
-                user_data = df[user_mask].copy()
-
-                for idx, row in user_data.iterrows():
-                    # Transacciones en la ventana
-                    window_mask = (
-                        (user_data[self.timestamp_col] >= row[f"_cutoff_{window_hours}h"])
-                        & (user_data[self.timestamp_col] < row[self.timestamp_col])
-                    )
-
-                    window_txns = user_data[window_mask]
-                    n_txns = len(window_txns)
-
-                    # Transacciones por hora
-                    df.loc[idx, f"transactions_per_hour_{window_hours}h"] = (
-                        n_txns / window_hours if window_hours > 0 else 0
-                    )
-
-                    # Monto por hora
-                    total_amount = window_txns[self.amount_col].sum()
-                    df.loc[idx, f"amount_per_hour_{window_hours}h"] = (
-                        total_amount / window_hours if window_hours > 0 else 0
-                    )
-
-            # Limpiar columna temporal
-            df = df.drop(columns=[f"_cutoff_{window_hours}h"])
-
-            features_created += 2  # 2 features por ventana
-
-        # Fill NaN con 0
-        velocity_cols = [
-            col for col in df.columns if any(f"_{w}h" in col for w in windows)
-        ]
-        df[velocity_cols] = df[velocity_cols].fillna(0)
-
-        logger.info(f"✅ Creadas {features_created} features de velocidad")
-
-        return df
-
-    def create_behavioral_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Crea features de comportamiento del usuario.
-
-        Features:
-        - amount_deviation: Desviación del monto respecto al promedio del usuario
-        - is_new_merchant: Si el comerciante es nuevo para el usuario
-        - time_since_last_transaction: Tiempo desde última transacción (horas)
-        """
-        df = df.copy()
-
-        logger.info("Creando features de comportamiento...")
-
-        # Asegurar que está ordenado
-        df = df.sort_values([self.user_col, self.timestamp_col])
-
-        # Asegurar que timestamp es datetime
-        if not pd.api.types.is_datetime64_any_dtype(df[self.timestamp_col]):
-            df[self.timestamp_col] = pd.to_datetime(df[self.timestamp_col])
-
-        # Calcular monto promedio histórico por usuario
-        user_avg_amount = (
-            df.groupby(self.user_col)[self.amount_col]
-            .expanding()
-            .mean()
-            .reset_index(level=0, drop=True)
-        )
-
-        # Desviación del monto
-        df["amount_deviation"] = (
-            df[self.amount_col] - user_avg_amount
-        ) / (user_avg_amount + 1e-6)
-
-        # Tiempo desde última transacción
-        df["time_since_last_transaction"] = (
-            df.groupby(self.user_col)[self.timestamp_col]
+    @staticmethod
+    def _time_since_last(df: pd.DataFrame) -> pd.Series:
+        """Segundos desde la última transacción del mismo usuario. Primera txn = 0."""
+        return (
+            df.groupby("user_id")["created_at"]
             .diff()
             .dt.total_seconds()
-            / 3600  # convertir a horas
+            .fillna(0)
+            .astype(np.float32)
         )
 
-        # Fill NaN para primera transacción
-        df["time_since_last_transaction"] = df["time_since_last_transaction"].fillna(0)
-
-        # Si hay columna de merchant
-        if self.merchant_col and self.merchant_col in df.columns:
-            # Marcar si es un merchant nuevo para el usuario
-            df["is_new_merchant"] = 0
-
-            for user_id in df[self.user_col].unique():
-                user_mask = df[self.user_col] == user_id
-                user_data = df[user_mask].copy()
-
-                seen_merchants = set()
-                for idx, row in user_data.iterrows():
-                    merchant = row[self.merchant_col]
-                    if merchant not in seen_merchants:
-                        df.loc[idx, "is_new_merchant"] = 1
-                        seen_merchants.add(merchant)
-
-            logger.info("✅ Creadas 3 features de comportamiento (con merchant)")
-        else:
-            logger.info("✅ Creadas 2 features de comportamiento (sin merchant)")
-
-        return df
-
-    def fit_transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Aplica todos los feature engineering.
-
-        Args:
-            df: DataFrame con transacciones
-
-        Returns:
-            DataFrame con todos los features agregados
-        """
-        logger.info("=" * 60)
-        logger.info("Iniciando Feature Engineering para Detección de Fraude")
-        logger.info("=" * 60)
-
-        df = df.copy()
-
-        # 1. Features temporales
-        df = self.create_temporal_features(df)
-
-        # 2. Features de agregación
-        df = self.create_aggregation_features(df)
-
-        # 3. Features de velocidad
-        df = self.create_velocity_features(df)
-
-        # 4. Features de comportamiento
-        df = self.create_behavioral_features(df)
-
-        logger.info("=" * 60)
-        logger.info(f"✅ Feature Engineering completado")
-        logger.info(f"   Features originales: {len(df.columns) - self._count_new_features(df)}")
-        logger.info(f"   Features nuevos: {self._count_new_features(df)}")
-        logger.info(f"   Total features: {len(df.columns)}")
-        logger.info("=" * 60)
-
-        return df
-
-    def _count_new_features(self, df: pd.DataFrame) -> int:
-        """Cuenta features nuevos creados."""
-        new_feature_patterns = [
-            "hour_of_day",
-            "day_of_week",
-            "is_weekend",
-            "is_night",
-            "is_early_morning",
-            "day_of_month",
-            "month",
-            "_transactions_",
-            "_amount_",
-            "amount_deviation",
-            "time_since_last_transaction",
-            "is_new_merchant",
+    def feature_names(self) -> List[str]:
+        return [
+            "user_txn_count_1h",
+            "user_txn_count_24h",
+            "time_since_last_txn",
+            "user_amount_24h",
         ]
 
-        count = 0
-        for col in df.columns:
-            if any(pattern in col for pattern in new_feature_patterns):
-                count += 1
 
-        return count
+# ── Grupo 4: Comportamentales ─────────────────────────────────────────────────
+
+class BehavioralFeatures(FeatureGroup):
+    """Features #15-18: acumulados, ratio de reversión y antigüedad de cuenta."""
+
+    def __init__(self) -> None:
+        self._user_first_txn: Optional[Dict] = None
+
+    def fit(self, df_train: pd.DataFrame) -> "BehavioralFeatures":
+        self._user_first_txn = (
+            df_train.groupby("user_id")["created_at"].min().to_dict()
+        )
+        logger.debug(f"BehavioralFeatures.fit — {len(self._user_first_txn)} usuarios en train")
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self._user_first_txn is None:
+            raise RuntimeError("Llamar fit() antes de transform()")
+        out = df.copy()
+        out["user_distinct_facilities_cumul"] = self._cumulative_nunique(out, "facility_id")
+        out["user_distinct_methods"] = self._cumulative_nunique(out, "payment_method")
+        out["user_reversal_ratio_30d"] = self._reversal_ratio_30d(out)
+        out["user_account_age_days"] = self._account_age_days(out)
+        return out
+
+    @staticmethod
+    def _cumulative_nunique_fn(series: pd.Series) -> pd.Series:
+        """Conteo acumulado de valores únicos PREVIOS — O(n), excluye el valor actual."""
+        seen: set = set()
+        result = []
+        for val in series:
+            result.append(len(seen))
+            seen.add(val)
+        return pd.Series(result, index=series.index, dtype=np.int32)
+
+    def _cumulative_nunique(self, df: pd.DataFrame, col: str) -> pd.Series:
+        return (
+            df.groupby("user_id")[col]
+            .transform(self._cumulative_nunique_fn)
+            .astype(np.int32)
+        )
+
+    @staticmethod
+    def _reversal_ratio_30d(df: pd.DataFrame) -> pd.Series:
+        """Proporción rolling 30D de reversiones, shifted 1 dentro del grupo.
+
+        ADVERTENCIA: usa `status` de forma derivada. Feature #17 requiere
+        análisis de sensibilidad (Gate D).
+        """
+        df = df.copy()
+        df["_is_reversal"] = df["status"].isin(
+            ["totally_refunded", "refunded_to_credit"]
+        ).astype(np.int8)
+
+        df["_ratio_raw"] = (
+            df.groupby("user_id")
+            .rolling("30D", on="created_at")["_is_reversal"]
+            .mean()
+            .droplevel(0)
+            .reindex(df.index)
+        )
+        shifted = df.groupby("user_id")["_ratio_raw"].shift(1).fillna(0)
+        return shifted.astype(np.float32)
+
+    def _account_age_days(self, df: pd.DataFrame) -> pd.Series:
+        """Días desde la primera transacción del usuario (lookup en train).
+
+        Usuarios no vistos en train usan su primera aparición en el split.
+        """
+        first_txn = df["user_id"].map(self._user_first_txn)
+        new_users = first_txn.isna()
+        if new_users.any():
+            split_first = df.loc[new_users].groupby("user_id")["created_at"].transform("min")
+            first_txn.loc[new_users] = split_first
+        return (df["created_at"] - first_txn).dt.days.clip(lower=0).astype(np.int32)
+
+    def feature_names(self) -> List[str]:
+        return [
+            "user_distinct_facilities_cumul",
+            "user_distinct_methods",
+            "user_reversal_ratio_30d",
+            "user_account_age_days",
+        ]
+
+
+# ── Grupo 5: Contextuales ─────────────────────────────────────────────────────
+
+class ContextualFeatures(FeatureGroup):
+    """Features #19-20: lookup de estadísticas de facility calculadas en train."""
+
+    def __init__(self) -> None:
+        self._facility_avg_amount: Optional[Dict] = None
+        self._global_avg_amount: Optional[float] = None
+
+    def fit(self, df_train: pd.DataFrame) -> "ContextualFeatures":
+        self._global_avg_amount = float(df_train["amount"].mean())
+        self._facility_avg_amount = (
+            df_train.groupby("facility_id")["amount"].mean().to_dict()
+        )
+        logger.debug(
+            f"ContextualFeatures.fit — {len(self._facility_avg_amount)} facilities"
+        )
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        if self._facility_avg_amount is None:
+            raise RuntimeError("Llamar fit() antes de transform()")
+        out = df.copy()
+        out["facility_avg_amount"] = (
+            out["facility_id"]
+            .map(self._facility_avg_amount)
+            .fillna(self._global_avg_amount)
+            .astype(np.float32)
+        )
+        out["amount_facility_ratio"] = (
+            out["amount"] / (out["facility_avg_amount"] + 1e-8)
+        ).astype(np.float32)
+        return out
+
+    def feature_names(self) -> List[str]:
+        return ["facility_avg_amount", "amount_facility_ratio"]
+
+
+# ── Compositor ────────────────────────────────────────────────────────────────
+
+class FeatureEngineer:
+    """Genera las 20 features oficiales del catálogo.
+
+    Patrón Compositor: delega a FeatureGroups individuales.
+    Patrón fit/transform para evitar leakage.
+
+    Uso:
+        fe = FeatureEngineer()
+        train_features = fe.fit_transform(df_train)       # con warm history ya prepended
+        val_features   = fe.transform(df_val)
+        test_features  = fe.transform(df_test)
+    """
+
+    def __init__(self, groups: Optional[List[FeatureGroup]] = None) -> None:
+        self._groups: List[FeatureGroup] = groups or [
+            TransactionalFeatures(),
+            TemporalFeatures(),
+            VelocityFeatures(),
+            BehavioralFeatures(),
+            ContextualFeatures(),
+        ]
+        self._fitted: bool = False
+
+    # ── Interfaz pública ──────────────────────────────────────────────────────
+
+    def fit(self, df_train: pd.DataFrame) -> "FeatureEngineer":
+        """Aprende estadísticas del training set."""
+        self._validate_required_columns(df_train)
+        df_sorted = df_train.sort_values(["user_id", "created_at"]).reset_index(drop=True)
+        for group in self._groups:
+            group.fit(df_sorted)
+        self._fitted = True
+        logger.info("FeatureEngineer.fit() completado")
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Genera las 20 features. Requiere fit() previo.
+
+        Returns:
+            DataFrame con FEATURE_NAMES + METADATA_COLS.
+        """
+        if not self._fitted:
+            raise RuntimeError("Llamar fit() antes de transform()")
+        self._validate_required_columns(df)
+
+        # Prerequisito obligatorio: orden temporal por usuario
+        out = df.sort_values(["user_id", "created_at"]).reset_index(drop=True)
+
+        for group in self._groups:
+            out = group.transform(out)
+
+        available_meta = [c for c in METADATA_COLS if c in out.columns]
+        return out[FEATURE_NAMES + available_meta].copy()
+
+    def fit_transform(self, df_train: pd.DataFrame) -> pd.DataFrame:
+        """Fit + transform en un solo paso (solo para train)."""
+        return self.fit(df_train).transform(df_train)
+
+    def transform_with_warm_history(
+        self,
+        df_split: pd.DataFrame,
+        df_warm: pd.DataFrame,
+    ) -> pd.DataFrame:
+        """Compute features prepending warm history, luego descarta filas warm.
+
+        Uso:
+          - Para train: df_warm = warm_history (Dic 2024)
+          - Para val:   df_warm = últimas 30 días del train
+          - Para test:  df_warm = últimas 30 días del val
+        """
+        if not self._fitted:
+            raise RuntimeError("Llamar fit() antes de transform_with_warm_history()")
+
+        _MARKER = "_is_split"
+        df_split = df_split.assign(**{_MARKER: True})
+        df_warm = df_warm.assign(**{_MARKER: False})
+
+        combined = (
+            pd.concat([df_warm, df_split], ignore_index=True)
+            .sort_values(["user_id", "created_at"])
+            .reset_index(drop=True)
+        )
+
+        # Transform sobre el combined (warm history ya ordena el contexto previo)
+        combined_feat = self.transform(combined)
+
+        # Recuperar el marcador del combined original (transform no lo retiene)
+        split_idx = combined.loc[combined[_MARKER]].index
+        result = combined_feat.loc[combined_feat.index.isin(split_idx)].reset_index(drop=True)
+        return result
+
+    # ── Persistencia ──────────────────────────────────────────────────────────
+
+    def save(self, path: str) -> None:
+        """Serializar instancia con joblib (incluye dicts y estadísticas)."""
+        joblib.dump(self, path)
+        logger.info(f"FeatureEngineer guardado en {path}")
+
+    @classmethod
+    def load(cls, path: str) -> "FeatureEngineer":
+        """Cargar instancia previamente guardada."""
+        instance = joblib.load(path)
+        logger.info(f"FeatureEngineer cargado desde {path}")
+        return instance
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_feature_names() -> List[str]:
+        return FEATURE_NAMES.copy()
+
+    @staticmethod
+    def get_feature_names_19() -> List[str]:
+        return FEATURE_NAMES_19.copy()
+
+    @staticmethod
+    def _validate_required_columns(df: pd.DataFrame) -> None:
+        required = {
+            "id", "user_id", "facility_id", "created_at", "status",
+            "amount", "discount", "tip", "payment_method",
+        }
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"Columnas faltantes: {missing}")

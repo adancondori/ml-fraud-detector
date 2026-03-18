@@ -26,14 +26,15 @@ if TYPE_CHECKING:
 
 # ── Constants ────────────────────────────────────────────────────
 
-REQUIRED_NON_NULL = ["id", "user_id", "facility_id", "reservation_paid_out", "created_at", "status"]
+REQUIRED_NON_NULL = ["id", "user_id", "facility_id", "amount", "created_at", "status"]
 SAFE_INT32_COLS = ["user_id", "facility_id"]
-SAFE_FLOAT32_COLS = ["reservation_paid_out", "tax", "tip", "discount"]
+SAFE_FLOAT32_COLS = ["amount", "tax", "tip", "discount"]
 
 CANONICAL_SQL = """
 SELECT
     id,
     user_id,
+    effective_user_id,
     facility_id,
     facility_name,
     created_at,
@@ -115,13 +116,13 @@ class DataManager:
             end = getattr(self._settings, end_attr)
 
             logger.info(f"Extracting {name}: {start} to {end}")
-            df = extractor.query_df(query, parameters={"start": start, "end": end})
+            df = extractor.query_to_dataframe(query, params={"start": start, "end": end})
 
-            df = df[df["user_id"] > 0]
-            if "_peerdb_is_deleted" in df.columns:
-                df = df[df["_peerdb_is_deleted"] == 0]
-                df = df.drop(columns=["_peerdb_is_deleted"], errors="ignore")
-            df = df.drop(columns=["is_fraud"], errors="ignore")
+            df = df[df["user_id"] > 0].copy()
+            df = df.drop(columns=["_peerdb_is_deleted", "is_fraud"], errors="ignore")
+            # Rename canonical amount column for downstream feature engineering
+            if "reservation_paid_out" in df.columns:
+                df = df.rename(columns={"reservation_paid_out": "amount"})
 
             self._validate_extraction(df, name)
             df = self._downcast(df)

@@ -156,6 +156,10 @@ class Settings(BaseSettings):
         return self.project_root / self.output_dir / "manifests"
 
     @property
+    def metrics_dir(self) -> Path:
+        return self.project_root / self.output_dir / "metrics"
+
+    @property
     def logs_path(self) -> Path:
         return self.project_root / self.logs_dir
 
@@ -191,6 +195,7 @@ class Settings(BaseSettings):
             self.scores_dir,
             self.models_output_dir,
             self.manifests_dir,
+            self.metrics_dir,
             self.logs_path,
         ]
         for d in dirs:
