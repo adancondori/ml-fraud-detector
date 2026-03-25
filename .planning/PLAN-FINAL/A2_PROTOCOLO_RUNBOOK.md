@@ -118,7 +118,7 @@ Tres baselines que Isolation Forest **debe** superar para validar utilidad:
 
 ---
 
-### Secuencia de ejecución (10 pasos)
+### Secuencia de ejecución (11 pasos)
 
 | Paso | Acción                                    | Detalle                                                |
 |------|-------------------------------------------|--------------------------------------------------------|
@@ -126,11 +126,12 @@ Tres baselines que Isolation Forest **debe** superar para validar utilidad:
 | 2    | Extraer warm + train + val + test         | Parquets raw → validar por split                       |
 | 3    | Canonicalizar                             | Tipos, proxies, manifests                              |
 | 4    | EDA notebook                              | Generar artefactos para Capítulo 2 de la tesis         |
-| 5    | Features                                  | 20 features + 19 variantes → ejecutar tests de leakage |
+| 4.5  | Normalización monetaria                   | Convertir montos a USD vía `rate_to_usd`                |
+| 5    | Features                                  | 31 features + variantes IF-30 / IF-21 → ejecutar tests de leakage |
 | 6    | Preprocesar                               | Fit en train, transform en todos los splits            |
 | 7    | Tune + entrenar                           | IF, LOF, OC-SVM → generar test scores                 |
 | 8    | Evaluar                                   | HE1-HE4, bootstrap CI, análisis temporal               |
-| 9    | Sensibilidad                              | Proxy, feature 17, SHAP, análisis per-status           |
+| 9    | Sensibilidad                              | Proxy, feature 18, SHAP, análisis per-status           |
 | 10   | Exportar                                  | `.tex`, `.pdf`, manifests, README de resultados        |
 
 ---
@@ -156,7 +157,7 @@ cero sin causa justificada. Usar `python run_pipeline.py --from-step N`.
 | 1  | Snapshot correcto y documentado en manifest                       | [ ]    |
 | 2  | Scores guardados como parquet con `id` y `created_at`             | [ ]    |
 | 3  | HE1-HE4 ejecutados, resultados en `results.json`                 | [ ]    |
-| 4  | Análisis de sensibilidad ejecutado (proxy, feature 17, SHAP)     | [ ]    |
+| 4  | Análisis de sensibilidad ejecutado (proxy, feature 18, SHAP)     | [ ]    |
 | 5  | Tablas LaTeX exportadas y compilables                             | [ ]    |
 | 6  | Figuras PDF/PNG generadas, tamaño > 0                            | [ ]    |
 | 7  | Edge case checklist revisado (ver Anexo A1)                       | [ ]    |

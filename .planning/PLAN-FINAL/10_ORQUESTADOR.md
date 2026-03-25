@@ -1,6 +1,8 @@
 # Fase 9: Orquestador del Pipeline
 
-## run_pipeline.py (raíz del proyecto)
+> **Estado:** esta fase sigue **pendiente de implementacion**. El documento define el contrato del orquestador futuro usando los nombres y modulos reales ya existentes en el repo.
+
+## `run_pipeline.py` (pendiente, raíz del proyecto)
 
 Punto de entrada único que ejecuta las 8 fases del pipeline de detección de anomalías
 de forma secuencial, con soporte para ejecución parcial, validación de prerrequisitos
@@ -29,21 +31,21 @@ def step2_engineer(settings) -> None:
 El orquestador actualmente importa clases concretas al inicio del archivo. Para cumplir con DIP:
 
 - **Cada función de paso recibe sus dependencias como parámetros** en lugar de importarlas en el scope global. Esto permite inyectar mocks en tests.
-- Como mínimo, las clases pesadas (`DataManager`, `FeatureEngineer`, `AnomalyModelTrainer`, etc.) deben importarse **dentro de cada función de paso** (lazy import), no al nivel del módulo.
+- Como mínimo, las clases pesadas (`DataManager`, `FeatureEngineer`, `ModelTrainer`, etc.) deben importarse **dentro de cada función de paso** (lazy import), no al nivel del módulo.
 
 ```python
 # MAL: import global de clase concreta
-from fraud_detector.models.trainer import AnomalyModelTrainer
+from fraud_detector.models.trainer import ModelTrainer
 
 def step4_train(settings):
-    trainer = AnomalyModelTrainer()  # acoplamiento fuerte
+    trainer = ModelTrainer()  # acoplamiento fuerte
     ...
 
 # BIEN: import local + parámetro inyectable
 def step4_train(settings, trainer_cls=None):
     if trainer_cls is None:
-        from fraud_detector.models.trainer import AnomalyModelTrainer
-        trainer_cls = AnomalyModelTrainer
+        from fraud_detector.models.trainer import ModelTrainer
+        trainer_cls = ModelTrainer
     trainer = trainer_cls()
     ...
 ```
@@ -52,7 +54,7 @@ Esto respeta DIP sin necesidad de un framework de inyección de dependencias com
 
 ---
 
-## Contratos de test (`test_pipeline.py`)
+## Contratos de test (`test_pipeline.py`, pendiente)
 
 Antes de implementar, escribir estos tests (TDD red-green-refactor):
 
@@ -176,12 +178,15 @@ from config.config import settings
 from fraud_detector.data.loader import DataManager
 from fraud_detector.features.engineering import FeatureEngineer, FEATURE_NAMES
 from fraud_detector.features.preprocessor import UnsupervisedPreprocessor
-from fraud_detector.models.trainer import AnomalyModelTrainer
-from fraud_detector.evaluation.metrics import HypothesisEvaluator
-from fraud_detector.reporting.latex_tables import ThesisTableGenerator
-from fraud_detector.reporting.figures import ThesisFigureGenerator
+from fraud_detector.models.trainer import ModelTrainer
+from fraud_detector.evaluation.metrics import evaluate_scores, bootstrap_ci
+# Modulos de reporting pendientes
+# from fraud_detector.reporting.latex_tables import ThesisTableGenerator
+# from fraud_detector.reporting.figures import ThesisFigureGenerator
 from fraud_detector.utils.logger import logger
 ```
+
+> **Estado actual del repo:** `run_pipeline.py` y el paquete `reporting/` siguen pendientes. Este documento define el contrato del orquestador futuro sin contradecir la arquitectura ya implementada.
 
 ---
 

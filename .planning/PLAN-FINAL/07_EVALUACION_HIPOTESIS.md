@@ -6,52 +6,27 @@
 
 `src/fraud_detector/evaluation/metrics.py`
 
-## Clase: `HypothesisEvaluator`
+## Modulo de evaluacion: `evaluation.metrics`
 
-Reemplaza la antigua `FraudMetrics`. Cada metodo devuelve un `dict` serializable a JSON.
+El repo actual expone funciones utilitarias en `src/fraud_detector/evaluation/metrics.py`. El plan usa esas funciones como base y, si mas adelante el pipeline lo requiere, puede envolverse en una fachada ligera sin cambiar el contrato estadistico.
 
 ### Firma de metodos
 
 ```python
-class HypothesisEvaluator:
+def evaluate_scores(labels: np.ndarray, scores: np.ndarray,
+                    top_k_percents: list = [0.01, 0.02, 0.05, 0.10]) -> dict:
+    """HE2 + HE3: AUC-ROC, AP, Precision@k, EF@k."""
 
-    def test_mann_whitney(self, scores: np.ndarray, proxy: np.ndarray) -> dict:
-        """HE1: separacion estadistica de scores."""
+def bootstrap_ci(labels: np.ndarray, scores: np.ndarray,
+                 metric_fn: callable, n_iterations: int = 1000,
+                 ci: float = 0.95, random_seed: int = 42) -> dict:
+    """Intervalo de confianza bootstrap."""
 
-    def compute_discrimination(self, scores: np.ndarray, proxy: np.ndarray) -> dict:
-        """HE2: capacidad discriminativa (AUC-ROC + AP)."""
+def precision_at_k(labels: np.ndarray, scores: np.ndarray, k_pct: float = 0.05) -> float:
+    """Precision@k."""
 
-    def compute_topk(self, scores: np.ndarray, proxy: np.ndarray,
-                     k_values: list = [0.01, 0.02, 0.05, 0.10]) -> dict:
-        """HE3: concentracion en top-K."""
-
-    def compare_models(self, results_dict: dict) -> dict:
-        """HE4: comparacion IF vs LOF vs OC-SVM."""
-
-    def bootstrap_ci(self, scores: np.ndarray, proxy: np.ndarray,
-                     metric_fn: callable, n_iterations: int = 1000,
-                     ci: float = 0.95, random_seed: int = 42) -> dict:
-        """Intervalo de confianza bootstrap."""
-
-    def temporal_stability(self, scores: np.ndarray, proxy: np.ndarray,
-                           dates: pd.Series, model_name: str) -> dict:
-        """AUC mensual en test set."""
-
-    def ks_test(self, scores: np.ndarray, proxy: np.ndarray) -> dict:
-        """Kolmogorov-Smirnov complementario a Mann-Whitney."""
-
-    def apply_holm_bonferroni(self, p_values: list) -> list:
-        """Correccion por pruebas multiples."""
-
-    def per_status_evaluation(self, scores: np.ndarray, statuses: pd.Series,
-                              status_list: list = None) -> dict:
-        """Fase 7: AUC-ROC por tipo de status de reembolso individual."""
-
-    def full_evaluation(self, model_name: str, scores: np.ndarray,
-                        proxy: np.ndarray, dates: pd.Series = None,
-                        bootstrap_n: int = 1000,
-                        top_k_values: list = [0.01, 0.02, 0.05, 0.10]) -> dict:
-        """Evaluacion completa: HE1 + HE2 + HE3 + KS + bootstrap + temporal."""
+def enrichment_factor(labels: np.ndarray, scores: np.ndarray, k_pct: float = 0.05) -> float:
+    """Enrichment factor."""
 ```
 
 ---
@@ -60,7 +35,7 @@ class HypothesisEvaluator:
 
 ### Problema SRP
 
-`HypothesisEvaluator` tiene 10 metodos con responsabilidades muy diferentes: tests estadisticos (Mann-Whitney, KS), metricas de discriminacion (AUC, AP, top-k), bootstrap, estabilidad temporal, comparacion de modelos, y correccion de pruebas multiples. Un cambio en la logica de bootstrap no deberia requerir tocar el mismo archivo que implementa Mann-Whitney.
+Una implementacion monolitica mezclaria demasiadas responsabilidades: tests estadisticos, metricas de discriminacion, bootstrap, estabilidad temporal, comparacion de modelos y correcciones multiples.
 
 **Descomposicion recomendada:**
 
@@ -70,15 +45,15 @@ class HypothesisEvaluator:
 | `DiscriminationEvaluator` | `compute_discrimination`, `compute_topk`, `per_status_evaluation` | AUC-ROC, AP, top-k, EF, evaluacion por status |
 | `BootstrapAnalyzer` | `bootstrap_ci` | Intervalos de confianza bootstrap |
 | `TemporalAnalyzer` | `temporal_stability` | Estabilidad mensual de metricas |
-| `HypothesisEvaluator` | `full_evaluation`, `compare_models` | **Facade** que compone las clases anteriores |
+| `EvaluationFacade` (opcional) | `full_evaluation`, `compare_models` | **Facade** que compone las funciones anteriores |
 
 ### Problema ISP (Interface Segregation)
 
-Un cliente que solo necesita evaluar HE1 (e.g., un notebook exploratorio) se ve obligado a importar una clase con 10 metodos y dependencias de bootstrap, temporal, etc. La descomposicion anterior resuelve esto: el cliente importa solo `StatisticalTester`.
+Un cliente que solo necesita evaluar HE2/HE3 no deberia depender de una clase grande. La descomposicion anterior resuelve esto: el cliente importa solo las funciones necesarias.
 
 ### Metodo faltante: `per_status_evaluation`
 
-La Fase 7 (Sensibilidad) describe un analisis per-status que requiere calcular AUC-ROC por cada tipo de reembolso individualmente. Este metodo se ha agregado a la interfaz de `HypothesisEvaluator` arriba. En la descomposicion recomendada, pertenece a `DiscriminationEvaluator`.
+La Fase 7 (Sensibilidad) describe un analisis per-status que requiere calcular AUC-ROC por cada tipo de reembolso individualmente. Esa logica puede vivir como helper adicional en `evaluation.metrics` o en un modulo de sensibilidad dedicado.
 
 ---
 
@@ -257,11 +232,17 @@ Toda comparacion debe usar exactamente:
 - **Mismo snapshot** de datos
 - **Mismo test set** temporal (Sep-Dic 2025)
 - **Mismo proxy** (estricto)
-- **Mismas features** (20 o 19 segun variante)
+- **Mismas 31 features** (todos los modelos usan el mismo conjunto completo)
 - **Misma politica de nulos** y preprocesamiento
 - **Misma orientacion de scores** (alto = mas anomalo)
 
 Sin estas condiciones, HE4 no es defendible.
+
+### Nota sobre variantes de features
+
+- **IF-31** (31 features) es el modelo principal evaluado en HE1-HE4.
+- **IF-30** (30 features, sin `user_reversal_ratio_30d`) e **IF-21** (21 features base) se evaluan exclusivamente en la **Fase 7 (Sensibilidad)** para medir el impacto del conjunto expandido de features.
+- La comparacion HE4 (IF vs LOF vs OC-SVM) se realiza con los 3 modelos entrenados sobre las mismas 31 features.
 
 ### Retorno de `compare_models`
 
@@ -321,7 +302,7 @@ Se computa para: AUC-ROC y AP (minimo). Opcionalmente para Precision@5% y EF.
 
 ### Proposito
 
-Verificar que el modelo no se degrada a lo largo del periodo de test (Sep, Oct, Nov, Dic).
+Verificar que el modelo IF-31 (modelo principal, 31 features) no se degrada a lo largo del periodo de test (Sep, Oct, Nov, Dic).
 
 ### Procedimiento
 
@@ -510,7 +491,7 @@ Se ejecuta una vez por modelo (IF, LOF, OC-SVM). Luego `compare_models` recibe l
 
 ## Contratos TDD
 
-Tests a escribir **ANTES** de implementar `HypothesisEvaluator` (o sus componentes descompuestos). Usan datos sinteticos para verificar comportamiento correcto:
+Tests a escribir **ANTES** de ampliar el modulo `evaluation.metrics` con toda la logica de HE1-HE4. Usan datos sinteticos para verificar comportamiento correcto:
 
 | # | Test | Verifica |
 |---|------|----------|
@@ -523,22 +504,21 @@ Tests a escribir **ANTES** de implementar `HypothesisEvaluator` (o sus component
 | 7 | `test_holm_bonferroni_increases_p_values` | Que los p-values ajustados son >= a los originales |
 | 8 | `test_compare_models_counts_wins_correctly` | Que IF con mejores metricas obtiene el conteo correcto de victorias |
 | 9 | `test_full_evaluation_returns_all_keys` | Que el dict retornado contiene `he1`, `he2`, `he3`, `ks`, `bootstrap_ci_auc`, `bootstrap_ci_ap` |
+| 10 | `test_compare_models_all_use_31_features` | Que los 3 modelos (IF, LOF, OC-SVM) reciben datos con 31 columnas de features |
 
 ```python
 # Ejemplo de test #1 (separacion perfecta)
 def test_mann_whitney_perfect_separation_passes_he1():
     scores = np.concatenate([np.ones(100) * 10, np.zeros(900)])  # anomalias con score alto
     proxy = np.concatenate([np.ones(100), np.zeros(900)])
-    evaluator = HypothesisEvaluator()
-    result = evaluator.test_mann_whitney(scores, proxy)
+    result = test_mann_whitney(scores, proxy)
     assert result["he1_pass"] is True
     assert result["rank_biserial_r"] > 0.10
 
 # Ejemplo de test #7 (Holm-Bonferroni nunca reduce p-values)
 def test_holm_bonferroni_increases_p_values():
-    evaluator = HypothesisEvaluator()
     original = [0.01, 0.04, 0.03, 0.001]
-    adjusted = evaluator.apply_holm_bonferroni(original)
+    adjusted = apply_holm_bonferroni(original)
     for orig, adj in zip(original, adjusted):
         assert adj >= orig
 ```

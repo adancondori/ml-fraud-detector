@@ -15,8 +15,8 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 | D2 | El proxy principal es **estricto** (`totally_refunded`, `refunded_to_credit`); el amplio solo para analisis de sensibilidad. |
 | D3 | El modelo principal es **Isolation Forest**. |
 | D4 | La comparacion obligatoria es contra **LOF** y **One-Class SVM**. |
-| D5 | El resultado principal debe contrastarse con variante **sin `user_reversal_ratio_30d`** (19 features). |
-| D6 | `contamination` se fija en `"auto"` y **NO** entra al grid search (no afecta ranking). |
+| D5 | El resultado principal debe contrastarse con variante **sin `user_reversal_ratio_30d`** (30 features). |
+| D6 | `contamination` se incluye en el grid search (240 combos: 4x4x5x3). |
 | D7 | Feature 15 usa `cumulative_nunique_shifted` O(n), no `expanding().apply(nunique)`. |
 | D8 | Feature 18 usa `first_txn` del training set, no del split actual. |
 | D9 | Los scores siguen la convencion: `-decision_function(X)` (mayor = mas anomalo). |
@@ -40,7 +40,7 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 | Campo | Detalle |
 |-------|---------|
 | **Impacto** | Metricas artificiales, invalidez de la defensa. |
-| **Mitigacion** | Tests de leakage feature por feature, ablacion obligatoria Feature #17, validacion temporal estricta. |
+| **Mitigacion** | Tests de leakage feature por feature, ablacion obligatoria Feature #18, validacion temporal estricta. |
 
 ### R3 — Sobrecarga computacional
 
@@ -56,12 +56,12 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 | **Impacto** | Perder tiempo en piezas ajenas a la tesis. |
 | **Mitigacion** | No API, no realtime, no modelos extra, no dashboards. Solo pipeline offline. |
 
-### R5 — Circularidad Feature #17
+### R5 — Circularidad Feature #18
 
 | Campo | Detalle |
 |-------|---------|
 | **Impacto** | Metricas infladas por correlacion mecanica con proxy. |
-| **Mitigacion** | Sensitivity analysis obligatoria. Si delta AUC >= 0.02, reportar modelo 19-features como primario. |
+| **Mitigacion** | Sensitivity analysis obligatoria. Si delta AUC >= 0.02, reportar modelo 30-features como primario. |
 
 ### R6 — Escalabilidad OC-SVM
 
@@ -91,7 +91,14 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 | **Impacto** | Resultados no reproducibles. |
 | **Mitigacion** | Multi-seed (42, 52, 62) o justificacion explicita de seed unica. |
 
-### R10 — Lenguaje causal en la tesis
+### R10 — Normalización multi-moneda
+
+| Campo | Detalle |
+|-------|---------|
+| **Impacto** | Features monetarias inconsistentes si las tasas de cambio son incorrectas o incompletas. |
+| **Mitigacion** | Usar una unica fuente `rate_to_usd` mensual/snapshot; si la fuente original viene como `conversion_rate` con USD base, convertirla internamente a `rate_to_usd`; registrar moneda original y tasa aplicada como columnas de auditoria; spot-check manual de conversiones. |
+
+### R11 — Lenguaje causal en la tesis
 
 | Campo | Detalle |
 |-------|---------|
@@ -107,13 +114,14 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 - [ ] Contrato tesis-codigo escrito
 - [ ] Config limpia sin conceptos supervisados
 - [ ] SQL canonico congelado
-- [ ] Catalogo de 20 features fijado
+- [ ] Catalogo de 31 features fijado
 
 ### Fase 1 — Datos
 
 - [ ] Snapshot parquet creado (3 splits)
 - [ ] Warm history creado (Dic 2024)
 - [ ] Conteos validados (+-1% del objetivo)
+- [ ] Normalización monetaria aplicada (USD vía `rate_to_usd`)
 - [ ] Manifest generado
 - [ ] `is_fraud` eliminado del flujo
 
@@ -125,8 +133,8 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 
 ### Fase 3 — Features
 
-- [ ] 20 features implementadas y documentadas
-- [ ] Variante 19 features implementada
+- [ ] 31 features implementadas y documentadas
+- [ ] Variante 30 features implementada
 - [ ] Tests de leakage pasando
 - [ ] Bordes train/val/test validados
 - [ ] Cold-start manejado
@@ -158,7 +166,7 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 ### Fase 7 — Sensibilidad
 
 - [ ] Proxy estricto vs amplio evaluado
-- [ ] Feature #17 sensibilidad (delta AUC documentado)
+- [ ] Feature #18 sensibilidad (delta AUC documentado)
 - [ ] SHAP ejecutado (top 10 features)
 - [ ] Per-status evaluation completada
 - [ ] Sanity baselines verificados

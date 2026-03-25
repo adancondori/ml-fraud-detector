@@ -5,90 +5,36 @@
 
 ---
 
-## Clase AnomalyModelTrainer
+## Clase `ModelTrainer`
 
 ### Interfaz
 
 ```python
-class AnomalyModelTrainer:
-    """Entrena y evalua los tres modelos de deteccion de anomalias.
+class ModelTrainer:
+    """Entrena y scorea modelos de deteccion de anomalias.
 
     Convencion de scores: higher = mas anomalo.
-    Todos los modelos usan -decision_function(X).
+    En el repo actual se expone `score_samples(X)` y se normaliza
+    la orientacion para que score alto = mas anomalo.
     """
 
-    def __init__(self, random_state: int = 42):
-        self._random_state = random_state
-        self._models: dict[str, object] = {}  # nombre -> modelo entrenado
-        self._training_times: dict[str, float] = {}  # nombre -> segundos
-
-    # --- Entrenamiento individual ---
-
-    def train_isolation_forest(self, X_train: np.ndarray, params: dict) -> IsolationForest:
-        """Entrena un Isolation Forest con los parametros dados."""
+    def __init__(self, model_type: str = "isolation_forest", model_params: dict | None = None):
         ...
 
-    def train_lof(self, X_train: np.ndarray, params: dict) -> LocalOutlierFactor:
-        """Entrena LOF con novelty=True."""
+    def fit(self, X_train: np.ndarray) -> "ModelTrainer":
         ...
 
-    def train_ocsvm(self, X_train: np.ndarray, params: dict) -> OneClassSVM:
-        """Entrena One-Class SVM con kernel RBF."""
+    def score_samples(self, X: np.ndarray) -> np.ndarray:
+        """Genera scores de anomalia. Higher = mas anomalo."""
         ...
 
-    # --- Scoring ---
-
-    def score(self, model_name: str, X: np.ndarray) -> np.ndarray:
-        """Genera scores de anomalia. Higher = mas anomalo.
-
-        Para TODOS los modelos: -decision_function(X)
-        """
-        model = self._models[model_name]
-        return -model.decision_function(X)
-
-    # --- Grid search ---
-
-    def grid_search_if(
-        self,
-        X_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val_proxy: np.ndarray,
-        param_grid: dict,
-        checkpoint_path: str = None,
-    ) -> dict:
-        """Grid search para Isolation Forest. Optimiza AUC-ROC en val."""
+    def predict(self, X: np.ndarray) -> np.ndarray:
         ...
 
-    def grid_search_lof(
-        self,
-        X_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val_proxy: np.ndarray,
-        param_grid: dict,
-        checkpoint_path: str = None,
-    ) -> dict:
-        """Grid search para LOF."""
+    def save_model(self, output_path: str) -> None:
         ...
 
-    def grid_search_ocsvm(
-        self,
-        X_train: np.ndarray,
-        X_val: np.ndarray,
-        y_val_proxy: np.ndarray,
-        param_grid: dict,
-        checkpoint_path: str = None,
-    ) -> dict:
-        """Grid search para One-Class SVM."""
-        ...
-
-    # --- Persistencia ---
-
-    def save_model(self, model_name: str, path: str) -> None:
-        """Guardar modelo individual con joblib."""
-        ...
-
-    def load_model(self, model_name: str, path: str) -> None:
-        """Cargar modelo individual."""
+    def load_model(self, model_path: str) -> None:
         ...
 ```
 
@@ -98,7 +44,7 @@ class AnomalyModelTrainer:
 
 ### Problema SRP
 
-`AnomalyModelTrainer` acumula cinco responsabilidades distintas: entrenamiento, scoring, grid search, multi-seed y persistencia. Esto dificulta el testing y hace que un cambio en grid search pueda romper el scoring.
+`ModelTrainer` no deberia acumular demasiadas responsabilidades. El repo actual ya resuelve entrenamiento, scoring y persistencia; si se agrega grid search/resume, conviene separarlo en utilidades o runners dedicados.
 
 **Descomposicion recomendada:**
 
@@ -107,7 +53,7 @@ class AnomalyModelTrainer:
 | `ModelFactory` | Crear instancias de modelos con parametros dados |
 | `GridSearchRunner` | Ejecutar grid search con checkpoint/resume |
 | `ModelScorer` | Convencion unificada de scoring (`-decision_function`) |
-| `AnomalyModelTrainer` | **Facade** que orquesta las clases anteriores |
+| `ModelTrainer` | **Facade** liviana para entrenamiento, scoring y persistencia |
 
 ### Problema OCP
 
@@ -137,7 +83,7 @@ MODEL_REGISTRY = {
 }
 ```
 
-Con esta estructura, agregar un modelo nuevo solo requiere crear una clase y registrarla, sin tocar `AnomalyModelTrainer`.
+Con esta estructura, agregar un modelo nuevo solo requiere crear una clase y registrarla, sin tocar `ModelTrainer`.
 
 ---
 
@@ -169,7 +115,7 @@ def score(self, model_name: str, X: np.ndarray) -> np.ndarray:
 
 ```python
 IsolationForest(
-    contamination="auto",  # SIEMPRE — no afecta ranking, solo el threshold
+    contamination=...,  # Se explora en el grid: [0.01, 0.03, 0.05, 0.06, 0.08]
     random_state=self._random_state,
     n_jobs=-1,
 )
@@ -181,16 +127,20 @@ IsolationForest(
 |-----------|---------|----------|
 | `n_estimators` | [100, 200, 300, 500] | 4 |
 | `max_samples` | [256, 512, 1024, 2048] | 4 |
-| `max_features` | [0.5, 0.75, 1.0, "auto"] | 4 |
+| `max_features` | [0.5, 0.75, 1.0] | 3 |
+| `contamination` | [0.01, 0.03, 0.05, 0.06, 0.08] | 5 |
 
-**Total: 4 x 4 x 4 = 64 combinaciones.**
+**Total: 4 x 4 x 5 x 3 = 240 combinaciones.**
 
-> Nota: `max_features="auto"` en scikit-learn equivale a `1.0` para IsolationForest, pero se incluye explicitamente para documentacion. Si se confirma equivalencia exacta, reducir a 48 combos eliminando duplicados.
-
-`contamination` se fija en `"auto"` y se **excluye del grid** porque:
-- No afecta `decision_function(X)`, solo el threshold de `predict()`.
-- No usamos `predict()`, solo scores continuos para AUC-ROC.
-- Eliminar contamination del grid redujo las combinaciones de 256 a 64 (correccion critica).
+> **Nota sobre contamination y ranking:**
+> - `score_samples(X)` es INVARIANTE a `contamination` — produce los mismos scores raw
+> - `decision_function(X)` = `score_samples(X) - offset_`, donde `offset_` depende de `contamination`
+> - El RANKING se preserva (offset es constante), por lo que AUC-ROC es identico para cualquier `contamination`
+> - En la practica: las 240 combos producen 48 AUC-ROC unicos (5 contamination × misma arquitectura = mismo ranking)
+> - Se mantiene `contamination` en el grid para documentar su nulo impacto en el ranking, lo cual refuerza la tesis
+> - **Scoring canonico:** usar `-model.score_samples(X)` (mayor = mas anomalo), NO `decision_function()`
+>
+> `max_features="auto"` equivale a `1.0` en IsolationForest, eliminado del grid para evitar duplicados.
 
 ### Metrica de optimizacion
 
@@ -207,7 +157,7 @@ auc = roc_auc_score(y_val_proxy, scores_val)
 
 ```python
 def grid_search_if(self, X_train, X_val, y_val_proxy, param_grid, checkpoint_path=None):
-    """Grid search con checkpoint cada 10 combinaciones.
+    """Grid search con checkpoint cada 20 combinaciones.
 
     Si checkpoint_path existe y contiene resultados previos, reanuda
     desde donde se quedo (util ante crashes o timeouts).
@@ -227,10 +177,9 @@ def grid_search_if(self, X_train, X_val, y_val_proxy, param_grid, checkpoint_pat
     for i, params in enumerate(all_combos[completed:], start=completed):
         t0 = time.time()
         model = IsolationForest(
-            contamination="auto",
             random_state=self._random_state,
             n_jobs=-1,
-            **params,
+            **params,  # incluye contamination del grid
         )
         model.fit(X_train)
         scores_val = -model.decision_function(X_val)
@@ -240,8 +189,8 @@ def grid_search_if(self, X_train, X_val, y_val_proxy, param_grid, checkpoint_pat
         results.append({**params, "auc_roc": auc, "time_seconds": elapsed})
         logger.info(f"IF combo {i+1}/{len(all_combos)}: AUC={auc:.4f} ({elapsed:.1f}s)")
 
-        # Checkpoint cada 10 combos
-        if checkpoint_path and (i + 1) % 10 == 0:
+        # Checkpoint cada 20 combos
+        if checkpoint_path and (i + 1) % 20 == 0:
             pd.DataFrame(results).to_csv(checkpoint_path, index=False)
             logger.info(f"Checkpoint guardado: {checkpoint_path}")
 
@@ -260,8 +209,32 @@ def grid_search_if(self, X_train, X_val, y_val_proxy, param_grid, checkpoint_pat
 ### Tiempo estimado
 
 - ~10s por combinacion (3.1M filas).
-- 64 combinaciones x 10s = ~10-15 minutos total.
+- 240 combinaciones x 10s = ~30-45 minutos total.
 - Con `n_jobs=-1` y paralelismo de arboles.
+
+---
+
+## Variantes de modelo (Isolation Forest)
+
+Se entrenan tres variantes del Isolation Forest para analisis de sensibilidad y ablacion:
+
+| Variante | Features | Descripcion |
+|----------|----------|-------------|
+| **IF-31** | 31 features (conjunto completo) | Modelo primario. Grid search completo (240 combos). Multi-seed con 42, 52, 62. |
+| **IF-30** | 30 features (sin F18 `user_reversal_ratio_30d`) | Sensibilidad. Evalua si remover la feature con correlacion mecanica al proxy cambia el AUC significativamente (delta < 0.02). |
+| **IF-21** | 21 features (ablacion: solo grupos A-E, sin F06/F21) | Ablacion. Evalua el aporte incremental de los grupos F, G y H. |
+
+Las tres variantes se entrenan con los **mejores hiperparametros** obtenidos en el grid search de IF-31. Solo IF-31 pasa por grid search completo; IF-30 e IF-21 reutilizan esos hiperparametros.
+
+### Flujo de variantes
+
+```
+[Grid search IF-31 — 240 combos] --> best_params_if.json
+    |
+    +--> [Entrenar IF-31 con best params] --> isolation_forest.joblib
+    +--> [Entrenar IF-30 con best params, sin F18] --> isolation_forest_30.joblib
+    +--> [Entrenar IF-21 con best params, 21 features base] --> isolation_forest_21.joblib
+```
 
 ---
 
@@ -313,7 +286,7 @@ OneClassSVM(
 
 | Parametro | Valores | Cantidad |
 |-----------|---------|----------|
-| `nu` | [0.02, 0.05, 0.10] | 3 |
+| `nu` | [0.01, 0.05, 0.10] | 3 |
 | `gamma` | ["scale", "auto"] | 2 |
 
 **Total: 3 x 2 = 6 combinaciones.**
@@ -355,10 +328,12 @@ def _subsample_train(self, X_train, n_subsample=100_000):
 
 ### Estrategia
 
+Multi-seed se aplica exclusivamente al modelo **IF-31** (primario):
+
 | Fase | Seeds | Proposito |
 |------|-------|-----------|
 | Desarrollo | 42 | Iteracion rapida, debugging |
-| Ejecucion final | 42, 52, 62 | Verificar estabilidad del resultado |
+| Ejecucion final (IF-31) | 42, 52, 62 | Verificar estabilidad del resultado del modelo primario |
 
 ### Implementacion
 
@@ -442,9 +417,9 @@ def get_training_times(self) -> dict:
 X_train.npy + X_val.npy + y_val_proxy
     |
     v
-[Grid search IF — 64 combos]
+[Grid search IF-31 — 240 combos]
     |
-    +--> grid_search_if.csv (64 filas con AUC y tiempos)
+    +--> grid_search_if.csv (240 filas con AUC y tiempos)
     +--> best_params_if.json
     |
     v
@@ -460,19 +435,21 @@ X_train.npy + X_val.npy + y_val_proxy
     +--> best_params_ocsvm.json
     |
     v
-[Re-entrenar 3 modelos con best params en train completo]
+[Re-entrenar modelos con best params en train completo]
     |
-    +--> isolation_forest.joblib
+    +--> isolation_forest.joblib      (IF-31, modelo primario)
+    +--> isolation_forest_30.joblib   (IF-30, sin F18)
+    +--> isolation_forest_21.joblib   (IF-21, ablacion 21 features)
     +--> lof.joblib
     +--> ocsvm.joblib
     |
     v
-[Multi-seed (IF) — seeds 42, 52, 62]
+[Multi-seed IF-31 — seeds 42, 52, 62]
     |
     +--> multi_seed_results.csv
     |
     v
-[Gate C: verificar que test set no fue tocado]
+[Gate C: verificar que test set no fue tocado y todas las variantes entrenadas]
 ```
 
 ---
@@ -492,14 +469,18 @@ def test_gate_c_no_test_leakage():
     assert "test_auc" not in gs_if.columns  # NO debe haber metricas de test
 ```
 
-### 2. Los tres modelos estan guardados
+### 2. Todos los modelos y variantes estan guardados
 
 ```python
 def test_gate_c_models_saved():
-    """Los tres modelos deben existir como archivos joblib."""
-    assert os.path.exists("output/models/isolation_forest.joblib")
+    """Todos los modelos y variantes deben existir como archivos joblib."""
+    # Modelos principales
+    assert os.path.exists("output/models/isolation_forest.joblib")   # IF-31
     assert os.path.exists("output/models/lof.joblib")
     assert os.path.exists("output/models/ocsvm.joblib")
+    # Variantes IF
+    assert os.path.exists("output/models/isolation_forest_30.joblib")  # IF-30 (sin F18)
+    assert os.path.exists("output/models/isolation_forest_21.joblib")  # IF-21 (ablacion)
 ```
 
 ### 3. El test set no fue cargado en esta fase
@@ -517,11 +498,13 @@ def test_gate_c_test_untouched():
 
 | Artefacto | Ruta | Descripcion |
 |-----------|------|-------------|
-| `trainer.py` | `src/fraud_detector/models/trainer.py` | Clase `AnomalyModelTrainer` |
-| `isolation_forest.joblib` | `output/models/isolation_forest.joblib` | Mejor IF entrenado en train completo |
+| `trainer.py` | `src/fraud_detector/models/trainer.py` | Clase `ModelTrainer` |
+| `isolation_forest.joblib` | `output/models/isolation_forest.joblib` | IF-31: modelo primario (31 features) |
+| `isolation_forest_30.joblib` | `output/models/isolation_forest_30.joblib` | IF-30: sin F18 `user_reversal_ratio_30d` (sensibilidad) |
+| `isolation_forest_21.joblib` | `output/models/isolation_forest_21.joblib` | IF-21: 21 features base (ablacion) |
 | `lof.joblib` | `output/models/lof.joblib` | Mejor LOF entrenado en train completo |
 | `ocsvm.joblib` | `output/models/ocsvm.joblib` | Mejor OC-SVM entrenado en subsample |
-| `grid_search_if.csv` | `output/grid_search_if.csv` | 64 combos con AUC-ROC y tiempos |
+| `grid_search_if.csv` | `output/grid_search_if.csv` | 240 combos con AUC-ROC y tiempos |
 | `grid_search_lof.csv` | `output/grid_search_lof.csv` | 3 combos con AUC-ROC y tiempos |
 | `grid_search_ocsvm.csv` | `output/grid_search_ocsvm.csv` | 6 combos con AUC-ROC y tiempos |
 | `best_params_if.json` | `output/models/best_params_if.json` | Mejores hiperparametros IF |
@@ -533,10 +516,12 @@ def test_gate_c_test_untouched():
 
 | Modelo | Tamano | Nota |
 |--------|--------|------|
-| Isolation Forest | ~200 MB | 500 arboles x 3.1M muestras |
+| Isolation Forest (IF-31) | ~200 MB | 500 arboles x 3.1M muestras, 31 features |
+| Isolation Forest (IF-30) | ~200 MB | 500 arboles x 3.1M muestras, 30 features |
+| Isolation Forest (IF-21) | ~200 MB | 500 arboles x 3.1M muestras, 21 features |
 | LOF | ~1 GB | Almacena distancias k-NN para 3.1M puntos |
 | One-Class SVM | ~100 MB | Soporte vectorial sobre 100K subsample |
-| **Total modelos** | **~1.3 GB** | |
+| **Total modelos** | **~1.7 GB** | |
 
 ---
 
@@ -558,7 +543,7 @@ rng = np.random.default_rng(seed)
 
 ## Contratos TDD
 
-Tests a escribir **ANTES** de implementar `AnomalyModelTrainer`. Definen el comportamiento contractual:
+Tests a escribir **ANTES** de ampliar `ModelTrainer` con grid search/resume. Definen el comportamiento contractual:
 
 | # | Test | Verifica |
 |---|------|----------|
@@ -579,9 +564,9 @@ def test_score_convention_higher_is_more_anomalous():
     X_train = X_inliers
     X_test = np.vstack([X_inliers[:100], X_outliers])
 
-    trainer = AnomalyModelTrainer(random_state=42)
-    trainer.train_isolation_forest(X_train, {"n_estimators": 100})
-    scores = trainer.score("isolation_forest", X_test)
+    trainer = ModelTrainer(model_type="isolation_forest", model_params={"n_estimators": 100})
+    trainer.fit(X_train)
+    scores = trainer.score_samples(X_test)
 
     mean_inlier = scores[:100].mean()
     mean_outlier = scores[100:].mean()
@@ -594,9 +579,9 @@ def test_score_convention_higher_is_more_anomalous():
 
 | Paso | Tiempo |
 |------|--------|
-| Grid search IF (64 combos) | 10-15 min |
+| Grid search IF-31 (240 combos) | 30-45 min |
 | Grid search LOF (3 combos) | 15-30 min |
 | Grid search OC-SVM (6 combos) | ~3 min |
-| Re-entrenamiento final (3 modelos) | ~5 min |
-| Multi-seed IF (3 seeds) | ~1 min |
-| **Total Fase 5** | **~35-55 min** |
+| Re-entrenamiento final (5 modelos: IF-31, IF-30, IF-21, LOF, OC-SVM) | ~8 min |
+| Multi-seed IF-31 (3 seeds) | ~1 min |
+| **Total Fase 5** | **~60-90 min** |

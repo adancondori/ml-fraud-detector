@@ -12,8 +12,9 @@ durante toda la implementación.
 |------|----------------|--------------------------------------------------------|-------------------------------------|
 | 0    | Source          | ClickHouse (producción, réplica de lectura)            | —                                   |
 | 1    | Raw extracted   | Parquets deduplicados con `FINAL`, split por período   | `data/raw/*.parquet`                |
+| 1.5  | Currency norm   | Normalización monetaria a USD vía `rate_to_usd`        | `data/processed/*_currency.parquet` |
 | 2    | Canonical       | Tipos sanitizados, proxies calculados                  | `data/processed/*_raw.parquet`      |
-| 3    | Feature         | 20 features + 19 variantes                             | `data/processed/*_features.parquet` |
+| 3    | Feature         | 31 features + variantes IF-30 / IF-21                 | `data/processed/*_features.parquet` |
 | 4    | Model input     | Matrices escaladas                                     | `output/scores/*.npy`               |
 | 5    | Results         | Scores, métricas, tablas, figuras, manifests           | `output/**`                         |
 
@@ -46,8 +47,15 @@ durante toda la implementación.
 | `user_txn_count_1h`           | 1 hora    | Conteo de transacciones recientes del usuario    |
 | `user_txn_count_24h`          | 24 horas  | Velocidad transaccional diaria                   |
 | `user_amount_24h`             | 24 horas  | Monto acumulado diario                           |
-| `user_distinct_facilities`    | histórico | Diversidad de establecimientos                   |
+| `user_distinct_facilities_30d` | 30 días  | Diversidad reciente de establecimientos          |
 | `user_reversal_ratio_30d`     | 30 días   | Tasa de reversiones recientes                    |
+| `user_discount_ratio_30d`     | 30 días   | Ratio de descuentos del usuario en 30 días       |
+| `user_debit_count_30d`        | 30 días   | Conteo de cargas de crédito recientes            |
+| `user_debit_amount_30d`       | 30 días   | Monto de cargas de crédito recientes             |
+| `credit_flow_ratio`           | 30 días   | Relación entre débito y gasto prepago            |
+| `category_entropy_30d`        | 30 días   | Diversidad operativa del usuario                 |
+| `user_reversal_count_30d`     | 30 días   | Conteo absoluto de reversiones                   |
+| `user_merchandise_ratio_30d`  | 30 días   | Proporción de operaciones merchandise            |
 
 ### Reglas de warm history
 
@@ -66,6 +74,13 @@ durante toda la implementación.
 - Rango de fechas correcto por split
 - Conteos por status consistentes
 - IDs únicos (sin duplicados post-`FINAL`)
+
+### Capa 1.5 — Currency normalization
+
+- Tasa de cambio disponible para cada fecha/moneda del dataset
+- Montos convertidos a USD verificados contra spot-check manual
+- Moneda original y tasa aplicada registradas como columnas de auditoría
+- Sin nulls en `amount_usd` post-normalización
 
 ### Capa 2 — Canonical
 
@@ -109,7 +124,7 @@ durante toda la implementación.
 | 2  | Status vacío                           | Mapear a categoría explícita `'unknown'`                         |
 | 3  | Amount = 0                             | Proteger `log(0)` con `log1p()` y divisiones con denominador + ε |
 | 4  | Montos negativos o discount > amount   | Registrar en log, decidir: clipear a 0 o excluir                 |
-| 5  | Múltiples monedas                      | Verificar que `reservation_paid_out` está en USD; filtrar si no  |
+| 5  | Múltiples monedas                      | Normalizar a USD vía `rate_to_usd` (Capa 1.5); registrar moneda original y tasa aplicada |
 | 6  | `captured_at` nulo                     | Fallback a `created_at`, registrar proporción de fallbacks       |
 
 ### Feature engineering (Capa 3)

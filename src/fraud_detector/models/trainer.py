@@ -1,244 +1,115 @@
-"""
-Model training utilities with MLflow tracking.
-Supports multiple algorithms and hyperparameter tuning.
-"""
+"""Training helpers for unsupervised anomaly-detection models."""
+from __future__ import annotations
+
 from typing import Any, Dict, Optional
 
 import joblib
-import mlflow
-import mlflow.sklearn
 import numpy as np
-from lightgbm import LGBMClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    precision_score,
-    recall_score,
-    roc_auc_score,
-)
-from xgboost import XGBClassifier
+from sklearn.ensemble import IsolationForest
+from sklearn.neighbors import LocalOutlierFactor
+from sklearn.svm import OneClassSVM
 
 from config.config import settings
-from fraud_detector.utils.logger import log_model_metrics, logger
+from fraud_detector.evaluation.metrics import evaluate_scores
+from fraud_detector.utils.logger import logger
 
 
 class ModelTrainer:
-    """
-    Train and evaluate fraud detection models.
-
-    Features:
-    - Multiple algorithm support (XGBoost, LightGBM, Random Forest, Logistic Regression)
-    - MLflow experiment tracking
-    - Automatic metric computation
-    - Model persistence
-    """
+    """Train and score unsupervised anomaly models."""
 
     MODEL_REGISTRY = {
-        "xgboost": XGBClassifier,
-        "lightgbm": LGBMClassifier,
-        "random_forest": RandomForestClassifier,
-        "logistic": LogisticRegression,
+        "isolation_forest": IsolationForest,
+        "lof": LocalOutlierFactor,
+        "ocsvm": OneClassSVM,
     }
 
     def __init__(
         self,
-        model_type: str = "xgboost",
+        model_type: str = "isolation_forest",
         model_params: Optional[Dict[str, Any]] = None,
-        experiment_name: Optional[str] = None,
-    ):
-        """
-        Initialize model trainer.
-
-        Args:
-            model_type: Type of model to train
-            model_params: Model hyperparameters
-            experiment_name: MLflow experiment name
-        """
+    ) -> None:
         if model_type not in self.MODEL_REGISTRY:
             raise ValueError(
-                f"Unknown model type: {model_type}. "
-                f"Available: {list(self.MODEL_REGISTRY.keys())}"
+                f"Unknown model type '{model_type}'. "
+                f"Available: {list(self.MODEL_REGISTRY)}"
             )
-
         self.model_type = model_type
         self.model_params = model_params or {}
-        self.experiment_name = experiment_name or settings.mlflow_experiment_name
         self.model = None
 
-        # Setup MLflow
-        mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
-        mlflow.set_experiment(self.experiment_name)
+    def _default_params(self) -> Dict[str, Any]:
+        if self.model_type == "isolation_forest":
+            return {
+                "n_estimators": 200,
+                "max_samples": 512,
+                "max_features": 1.0,
+                "contamination": "auto",
+                "random_state": settings.random_seed,
+                "n_jobs": settings.n_jobs,
+            }
+        if self.model_type == "lof":
+            return {
+                "n_neighbors": 20,
+                "novelty": True,
+                "metric": "minkowski",
+            }
+        return {
+            "kernel": "rbf",
+            "nu": 0.05,
+            "gamma": "scale",
+        }
 
-        logger.info(f"Initialized trainer with {model_type} model")
+    def fit(self, X_train: np.ndarray) -> "ModelTrainer":
+        params = self._default_params()
+        params.update(self.model_params)
+        self.model = self.MODEL_REGISTRY[self.model_type](**params)
+        self.model.fit(X_train)
+        logger.info(
+            f"Fitted {self.model_type} on {len(X_train):,} rows with params={params}"
+        )
+        return self
 
-    def train(
-        self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: Optional[np.ndarray] = None,
-        y_val: Optional[np.ndarray] = None,
-    ) -> None:
-        """
-        Train model with MLflow tracking.
+    def score_samples(self, X: np.ndarray) -> np.ndarray:
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
 
-        Args:
-            X_train: Training features
-            y_train: Training labels
-            X_val: Validation features (optional)
-            y_val: Validation labels (optional)
-        """
-        logger.info(f"Training {self.model_type} model...")
+        if not hasattr(self.model, "score_samples"):
+            raise ValueError(f"Model '{self.model_type}' does not expose score_samples()")
 
-        with mlflow.start_run(run_name=f"{self.model_type}_training"):
-            # Log parameters
-            mlflow.log_params(self.model_params)
-            mlflow.log_param("model_type", self.model_type)
-            mlflow.log_param("n_samples_train", len(X_train))
+        raw_scores = self.model.score_samples(X)
+        anomaly_scores = -np.asarray(raw_scores, dtype=np.float64)
+        return anomaly_scores.astype(np.float32)
 
-            # Initialize model
-            model_class = self.MODEL_REGISTRY[self.model_type]
-            self.model = model_class(
-                random_state=settings.random_seed, **self.model_params
-            )
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        if self.model is None:
+            raise ValueError("Model not trained. Call fit() first.")
+        raw = np.asarray(self.model.predict(X))
+        return np.where(raw == -1, 1, 0).astype(np.int8)
 
-            # Train model
-            if X_val is not None and y_val is not None:
-                # Train with validation set if provided
-                if self.model_type in ["xgboost", "lightgbm"]:
-                    eval_set = [(X_val, y_val)]
-                    self.model.fit(
-                        X_train,
-                        y_train,
-                        eval_set=eval_set,
-                        verbose=False,
-                    )
-                else:
-                    self.model.fit(X_train, y_train)
-            else:
-                self.model.fit(X_train, y_train)
-
-            # Evaluate on training set
-            train_metrics = self.evaluate(X_train, y_train, dataset_name="train")
-
-            # Evaluate on validation set if provided
-            if X_val is not None and y_val is not None:
-                val_metrics = self.evaluate(X_val, y_val, dataset_name="val")
-
-            # Log model
-            mlflow.sklearn.log_model(self.model, "model")
-
-            logger.info("Model training completed")
+    @staticmethod
+    def predict_top_k(scores: np.ndarray, k_pct: float = 0.05) -> np.ndarray:
+        if not 0 < k_pct <= 1:
+            raise ValueError("k_pct must be in (0, 1]")
+        n = len(scores)
+        k = max(1, int(np.ceil(n * k_pct)))
+        threshold = np.partition(scores, -k)[-k]
+        return (scores >= threshold).astype(np.int8)
 
     def evaluate(
         self,
         X: np.ndarray,
-        y: np.ndarray,
-        dataset_name: str = "test",
+        proxy_labels: np.ndarray,
+        top_k_percents: Optional[list[float]] = None,
     ) -> Dict[str, float]:
-        """
-        Evaluate model and compute metrics.
-
-        Args:
-            X: Features
-            y: True labels
-            dataset_name: Name of dataset (for logging)
-
-        Returns:
-            Dictionary of metrics
-        """
-        if self.model is None:
-            raise ValueError("Model not trained. Call train() first.")
-
-        logger.info(f"Evaluating model on {dataset_name} set...")
-
-        # Predictions
-        y_pred = self.model.predict(X)
-        y_pred_proba = self.model.predict_proba(X)[:, 1]
-
-        # Compute metrics
-        metrics = {
-            f"{dataset_name}_accuracy": accuracy_score(y, y_pred),
-            f"{dataset_name}_precision": precision_score(y, y_pred, zero_division=0),
-            f"{dataset_name}_recall": recall_score(y, y_pred, zero_division=0),
-            f"{dataset_name}_f1": f1_score(y, y_pred, zero_division=0),
-            f"{dataset_name}_roc_auc": roc_auc_score(y, y_pred_proba),
-        }
-
-        # Confusion matrix
-        cm = confusion_matrix(y, y_pred)
-        tn, fp, fn, tp = cm.ravel()
-
-        metrics.update(
-            {
-                f"{dataset_name}_true_negatives": int(tn),
-                f"{dataset_name}_false_positives": int(fp),
-                f"{dataset_name}_false_negatives": int(fn),
-                f"{dataset_name}_true_positives": int(tp),
-            }
-        )
-
-        # Log to MLflow
-        mlflow.log_metrics(metrics)
-
-        # Log metrics
-        log_model_metrics(metrics)
-
-        return metrics
+        scores = self.score_samples(X)
+        return evaluate_scores(proxy_labels, scores, top_k_percents=top_k_percents)
 
     def save_model(self, output_path: str) -> None:
-        """
-        Save trained model to disk.
-
-        Args:
-            output_path: Path to save model
-        """
         if self.model is None:
             raise ValueError("No model to save. Train a model first.")
-
-        logger.info(f"Saving model to: {output_path}")
         joblib.dump(self.model, output_path)
-        logger.info("Model saved successfully")
+        logger.info(f"Saved {self.model_type} model to {output_path}")
 
     def load_model(self, model_path: str) -> None:
-        """
-        Load trained model from disk.
-
-        Args:
-            model_path: Path to model file
-        """
-        logger.info(f"Loading model from: {model_path}")
         self.model = joblib.load(model_path)
-        logger.info("Model loaded successfully")
-
-    def predict(self, X: np.ndarray) -> np.ndarray:
-        """
-        Make predictions with trained model.
-
-        Args:
-            X: Features
-
-        Returns:
-            Predictions
-        """
-        if self.model is None:
-            raise ValueError("Model not trained. Call train() or load_model() first.")
-
-        return self.model.predict(X)
-
-    def predict_proba(self, X: np.ndarray) -> np.ndarray:
-        """
-        Predict class probabilities.
-
-        Args:
-            X: Features
-
-        Returns:
-            Probability predictions
-        """
-        if self.model is None:
-            raise ValueError("Model not trained. Call train() or load_model() first.")
-
-        return self.model.predict_proba(X)
+        logger.info(f"Loaded {self.model_type} model from {model_path}")

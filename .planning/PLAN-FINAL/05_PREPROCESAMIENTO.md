@@ -4,9 +4,117 @@
 
 ---
 
+## Normalizacion Monetaria a USD (Paso Previo Obligatorio)
+
+### Contexto
+
+El dataset contiene transacciones en **20 monedas distintas**. El campo `reservation_paid_out` esta expresado en moneda local, por lo que las features monetarias (`amount`, `discount`, `tax`, `tip`) no son comparables entre paises sin una conversion previa a USD.
+
+**Este paso se ejecuta ANTES del escalado StandardScaler**, sobre los DataFrames crudos o durante Feature Engineering, para que todas las features monetarias esten en una base comun (USD).
+
+### Estructura de tasas de cambio
+
+La fuente canonica es un CSV exportado desde el snapshot de `default.exchange_rates` o una tabla mensual equivalente. El contrato ejecutable admite dos layouts:
+
+```python
+year_month,currency,rate_to_usd
+2025-01,CAD,0.698000
+2025-01,MYR,0.222000
+...
+```
+
+o bien:
+
+```python
+base_currency,target_currency,conversion_rate,timestamp
+USD,AED,3.6731,2026-03-20
+USD,AUD,1.420617,2026-03-20
+...
+```
+
+### Clase CurrencyNormalizer
+
+```python
+class CurrencyNormalizer:
+    """Normaliza columnas monetarias a USD usando `rate_to_usd`.
+
+    Internamente soporta:
+    1. CSV mensual directo (`year_month,currency,rate_to_usd`)
+    2. Snapshot ClickHouse (`base_currency,target_currency,conversion_rate,timestamp`)
+
+    En ambos casos termina con un lookup canonico:
+    `(year_month, currency) -> rate_to_usd`
+    """
+
+    MONETARY_COLS = ("amount", "discount", "tax", "tip")
+
+    def normalize(self, df, amount_col="amount", currency_col="currency", timestamp_col="created_at"):
+        result = df.copy()
+        result["amount_local"] = result[amount_col]
+        result["exchange_rate_applied"] = ...
+        result["exchange_rate_source"] = ...
+        for col in self.MONETARY_COLS:
+            if col in result.columns:
+                result[f"{col}_local"] = result[col]
+                result[col] = result[col] * result["exchange_rate_applied"]
+        return result
+```
+
+**Decision canonica del plan:** el pipeline trabaja con `rate_to_usd`. Si la fuente trae `conversion_rate` con USD como moneda base, se convierte internamente a `rate_to_usd = 1 / conversion_rate`.
+
+### Impacto en features
+
+La normalizacion a USD afecta directamente a las siguientes features:
+
+| Feature | ID | Impacto |
+|---------|----|---------|
+| `amount` | F01 | Monto normalizado a USD |
+| `log_amount` | F02 | Logaritmo del monto en USD |
+| `amount_usd_ratio` | F03 | Ratio recalculado sobre base USD |
+| `user_amount_24h` | F15 | Suma de montos en USD en ventana 24h |
+| `facility_avg_amount` | F22 | Promedio por facility en USD |
+| `amount_facility_ratio` | F23 | Ratio sobre promedio facility en USD |
+| `user_debit_amount_30d` | F26 | Suma de debitos en USD |
+| `staff_amount_zscore` | F30 | Desviacion relativa por rol y moneda |
+
+### Contratos TDD para CurrencyNormalizer
+
+| # | Test | Verifica |
+|---|------|----------|
+| 1 | `test_from_direct_rate_csv` | Que el CSV mensual directo se interpreta correctamente |
+| 2 | `test_from_clickhouse_snapshot_csv` | Que un snapshot ClickHouse se convierte a `rate_to_usd` correctamente |
+| 3 | `test_all_currencies_covered` | Que todas las combinaciones currency/month del dataset tienen tasa definida |
+
+```python
+def test_from_clickhouse_snapshot_csv():
+    csv = io.StringIO(
+        "base_currency,target_currency,conversion_rate,timestamp\n"
+        "USD,AED,3.6731,2026-03-20\n"
+    )
+    normalizer = CurrencyNormalizer.from_csv(csv)
+    df = pd.DataFrame({
+        "amount": [36.731],
+        "currency": ["AED"],
+        "created_at": [pd.Timestamp("2026-03-20")],
+    })
+    result = normalizer.normalize(df)
+    assert abs(result["amount"].iloc[0] - 10.0) < 0.001
+
+
+def test_all_currencies_covered():
+    """Todas las combinaciones del dataset deben tener tasa."""
+    # Se ejecuta sobre el dataset real para detectar gaps
+    df = load_raw_dataset()  # todas las transacciones
+    normalizer = CurrencyNormalizer(exchange_rates=EXCHANGE_RATES)
+    # No debe lanzar KeyError
+    normalizer.transform(df)
+```
+
+---
+
 ## Objetivo
 
-Escalar las 20 features numericas para que todos los modelos operen sobre la misma base estandarizada. Esto es **critico** para OC-SVM (kernel RBF es sensible a la escala) y buena practica para comparabilidad entre modelos.
+Escalar las **31 features numericas** del modelo principal para que todos los modelos operen sobre la misma base estandarizada. Esto es **critico** para OC-SVM (kernel RBF es sensible a la escala) y buena practica para comparabilidad entre modelos.
 
 ---
 
@@ -24,7 +132,7 @@ Aunque IF es invariante, se aplica el mismo escalado a los tres modelos para gar
 
 ## No se necesita encoding ni imputacion
 
-- **No one-hot encoding:** Todas las 20 features del catalogo son numericas (continuas o binarias int8). No hay categoricas textuales.
+- **No one-hot encoding:** Todas las 31 features del catalogo son numericas (continuas o binarias int8). No hay categoricas textuales.
 - **No imputacion:** La fase de Feature Engineering garantiza que no haya NaN (fillna en todas las features, test #5 de Gate B lo verifica). Si transform produce NaN, es un bug en engineering.py, no un problema de preprocesamiento.
 
 ---
@@ -54,7 +162,7 @@ class UnsupervisedPreprocessor:
 
         Args:
             X_train: DataFrame con al menos las columnas en feature_names.
-            feature_names: Lista de 20 (o 19) nombres de features a escalar.
+            feature_names: Lista de 31 (o 30/21) nombres de features a escalar.
         """
         self._feature_names = feature_names
         self._scaler.fit(X_train[feature_names])
@@ -146,11 +254,11 @@ preprocessor.save("output/models/scaler.joblib")
 
 ## Reduccion de memoria con float32
 
-| Dtype | Bytes/valor | Para 3.1M x 20 |
+| Dtype | Bytes/valor | Para 3.1M x 33 |
 |-------|-------------|-----------------|
-| float64 | 8 | ~496 MB |
-| float32 | 4 | ~248 MB |
-| **Ahorro** | | **~248 MB (~50%)** |
+| float64 | 8 | ~818 MB |
+| float32 | 4 | ~409 MB |
+| **Ahorro** | | **~409 MB (~50%)** |
 
 `float32` ofrece ~7 digitos de precision, mas que suficiente para features escaladas. scikit-learn acepta float32 sin problemas en IF, LOF, y OC-SVM.
 
@@ -210,15 +318,15 @@ def test_transform_without_fit_raises_runtime_error():
 | Artefacto | Ruta | Descripcion |
 |-----------|------|-------------|
 | `preprocessor.py` | `src/fraud_detector/features/preprocessor.py` | Clase `UnsupervisedPreprocessor` |
-| `X_train.npy` | `output/scores/X_train.npy` | Array float32, ~3.1M x 20 |
-| `X_val.npy` | `output/scores/X_val.npy` | Array float32, ~1.1M x 20 |
-| `X_test.npy` | `output/scores/X_test.npy` | Array float32, ~2.5M x 20 |
+| `X_train.npy` | `output/scores/X_train.npy` | Array float32, ~3.1M x 33 |
+| `X_val.npy` | `output/scores/X_val.npy` | Array float32, ~1.1M x 33 |
+| `X_test.npy` | `output/scores/X_test.npy` | Array float32, ~2.5M x 33 |
 | `scaler.joblib` | `output/models/scaler.joblib` | StandardScaler ajustado en train |
 
 ### Tamanos estimados
 
-- `X_train.npy`: ~248 MB
-- `X_val.npy`: ~88 MB
-- `X_test.npy`: ~200 MB
+- `X_train.npy`: ~409 MB
+- `X_val.npy`: ~145 MB
+- `X_test.npy`: ~330 MB
 - `scaler.joblib`: < 1 KB
-- **Total:** ~536 MB
+- **Total:** ~884 MB

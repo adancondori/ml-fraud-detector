@@ -24,6 +24,7 @@ Indice de navegacion del plan final ejecutable.
 - `A3_RIESGOS_CHECKLIST.md`
 - `A4_GOBERNANZA_PRIVACIDAD_CONTRATOS.md`
 - `A5_AUDITORIA_END_TO_END.md`
+- `A6_VERIFICACION_CLICKHOUSE.md` — Ground truth de columnas, monedas, exchange rates (2026-03-24)
 
 ## Orden de uso
 

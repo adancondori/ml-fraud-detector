@@ -68,7 +68,7 @@ Este analisis debe alimentar la seccion de "justificacion del problema" del Capi
 
 ---
 
-## 3. Notebook: `notebooks/01_eda_capitulo2.ipynb`
+## 3. Notebook opcional: `notebooks/01_eda_capitulo2.ipynb`
 
 ### Correcciones respecto a versiones previas
 
@@ -284,7 +284,7 @@ El EDA **debe reproducir** los mismos numeros que ya estan en `Tesis-Latex/capit
 
 ## 6. Definition of Done
 
-- [ ] Notebook `01_eda_capitulo2.ipynb` ejecutable de principio a fin sin errores
+- [ ] Notebook `01_eda_capitulo2.ipynb` ejecutable de principio a fin sin errores, si se decide materializar la version opcional en notebook
 - [ ] Todas las tablas LaTeX generadas en `output/tables/cap2_*.tex`
 - [ ] Todas las figuras generadas en `output/figures/cap2_*.{pdf,png}`
 - [ ] `cap2_summary.json` creado con metricas consolidadas

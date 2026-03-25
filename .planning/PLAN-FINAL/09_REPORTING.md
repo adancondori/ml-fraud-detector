@@ -16,7 +16,7 @@
 
 ### SRP — Funciones puras para generación de tablas
 
-`ThesisTableGenerator` expone 18 metodos, uno por tabla. Esto es aceptable para un generador de reportes, siempre que **cada metodo sea una funcion pura**: recibe datos como entrada, retorna un `str` LaTeX como salida, sin efectos secundarios (no escribe a disco, no muta estado). La escritura a disco la realiza opcionalmente el caller via `output_path`, pero el metodo en si solo construye el string. Esto facilita el testing unitario: se puede verificar la salida sin tocar el filesystem.
+`ThesisTableGenerator` expone 24 metodos, uno por tabla. Esto es aceptable para un generador de reportes, siempre que **cada metodo sea una funcion pura**: recibe datos como entrada, retorna un `str` LaTeX como salida, sin efectos secundarios (no escribe a disco, no muta estado). La escritura a disco la realiza opcionalmente el caller via `output_path`, pero el metodo en si solo construye el string. Esto facilita el testing unitario: se puede verificar la salida sin tocar el filesystem.
 
 ### OCP — Patrón de registro para extensibilidad
 
@@ -37,7 +37,7 @@ def _table_model_comparison(results: dict) -> str:
     ...
 ```
 
-Esto permite añadir tablas sin modificar la clase existente. Para la v1 del pipeline, la clase monolitica con 18 metodos es aceptable, pero este patron queda documentado para futuras extensiones.
+Esto permite añadir tablas sin modificar la clase existente. Para la v1 del pipeline, la clase monolitica con 24 metodos es aceptable, pero este patron queda documentado para futuras extensiones.
 
 ---
 
@@ -128,8 +128,8 @@ Critico para feature names con underscores (e.g., `txn_amount_log` → `txn\_amo
 | Metodo | Tabla # | Descripcion | Input |
 |--------|---------|-------------|-------|
 | `table_dataset_summary(split_info)` | 3.5 | Resumen del dataset (splits, tasas de proxy, rangos de fecha) | `dict` con info por split |
-| `table_feature_descriptions()` | 3.6 | Catalogo de las 20 features (nombre, tipo, descripcion) | Estatico desde `FEATURE_NAMES` |
-| `table_feature_statistics(stats_df)` | 3.7 | Estadisticas descriptivas (mean, std, min, max) por feature | `pd.DataFrame` |
+| `table_feature_descriptions()` | 3.6 | Catalogo de las 31 features (nombre, tipo, descripcion) | Estatico desde `FEATURE_NAMES` |
+| `table_feature_statistics(stats_df)` | 3.7 | Estadisticas descriptivas (mean, std, min, max) de las 31 features | `pd.DataFrame` |
 | `table_grid_search_top10(grid_df)` | 3.8 | Top 10 configuraciones del grid search de IF | `pd.DataFrame` de CSV |
 | `table_model_comparison(results)` | 3.10 | Comparacion de 3 modelos x 4+ metricas | `dict` de resultados |
 | `table_he1_results(results)` | 3.11 | Mann-Whitney U, p-value, rank-biserial r, CLES | `dict` por modelo |
@@ -138,17 +138,22 @@ Critico para feature names con underscores (e.g., `txn_amount_log` → `txn\_amo
 | `table_he4_comparison(results)` | 3.14 | Matriz IF vs competidores (4 metricas, ganador marcado) | `dict` de comparacion |
 | `table_bootstrap_ci(results)` | 3.15 | Bootstrap CIs (mean, lower, upper) por modelo y metrica | `dict` por modelo |
 | `table_sensitivity_proxy(results)` | 3.16 | Proxy estricto vs amplio (AUC, AP, delta) | `dict` de sensibilidad |
-| `table_sensitivity_feature17(results)` | 3.17 | 20 vs 19 features (AUC, delta, Jaccard, Spearman) | `dict` de sensibilidad |
-| `table_temporal_stability(results)` | 3.18 | AUC mensual por modelo (Sep, Oct, Nov, Dic) | `dict` temporal |
-| `table_hypothesis_summary(results)` | 3.19 | Resumen HE1-HE4 con veredicto (respaldada/rechazada) | `dict` de resultados |
-| `table_posthoc_facility(results)` | 3.20 | Top 10 centros con mayor concentracion de anomalias | `dict` post-hoc |
-| `table_posthoc_manager(results)` | 3.21 | Top 10 actores/usuarios asociados con mayor concentracion de anomalias y descuentos; si no hay identidad validada, exporta agregado anonimo | `dict` post-hoc |
-| `table_posthoc_currency(results)` | 3.22 | Distribucion de anomalias por moneda | `dict` post-hoc |
-| `table_posthoc_discount_pattern(results)` | 3.23 | Top pares centro-actor con patron de descuento anomalo; degradado a centro si no hay identidad validada | `dict` post-hoc |
+| `table_sensitivity_feature18(results)` | 3.17 | 31 vs 30 features (AUC, delta, Jaccard, Spearman) | `dict` de sensibilidad |
+| `table_ablation_31vs21(results)` | 3.18 | Ablacion IF-31 vs IF-21: AUC-ROC, AP, P@5%, EF con deltas | `dict` de ablacion |
+| `table_temporal_stability(results)` | 3.19 | AUC mensual por modelo (Sep, Oct, Nov, Dic) | `dict` temporal |
+| `table_hypothesis_summary(results)` | 3.20 | Resumen HE1-HE4 con veredicto (respaldada/rechazada) | `dict` de resultados |
+| `table_metrics_by_role(results)` | 3.21 | AUC-ROC, AP, P@5%, EF por rol de usuario | `dict` de metricas por rol |
+| `table_metrics_by_category(results)` | 3.22 | AUC-ROC, AP, P@5%, EF por categoria de pago | `dict` de metricas por categoria |
+| `table_anomaly_types(results)` | 3.23 | Tipologia de 9 tipos de anomalia con features dominantes y descripciones | `dict` de tipologia |
+| `table_user_risk_profile(results)` | 3.24 | Perfil de riesgo agregado por usuario (metricas de riesgo) | `dict` de perfiles |
+| `table_posthoc_facility(results)` | 3.25 | Top 10 centros con mayor concentracion de anomalias | `dict` post-hoc |
+| `table_posthoc_manager(results)` | 3.26 | Top 10 actores/usuarios asociados con mayor concentracion de anomalias y descuentos; si no hay identidad validada, exporta agregado anonimo | `dict` post-hoc |
+| `table_posthoc_currency(results)` | 3.27 | Distribucion de anomalias por moneda | `dict` post-hoc |
+| `table_posthoc_discount_pattern(results)` | 3.28 | Top pares centro-actor con patron de descuento anomalo; degradado a centro si no hay identidad validada | `dict` post-hoc |
 
 ### Tablas que requieren datos fuera de `results.json`
 
-Las tablas 3.5, 3.6 y 3.7 no se derivan de `results.json`. El orquestador debe:
+Las tablas 3.5, 3.6, 3.7, 3.23 y 3.24 no se derivan de `results.json`. El orquestador debe:
 
 1. **Tabla 3.5:** Computar `split_info` (filas, proxy rate, date range) desde los parquets de features.
 2. **Tabla 3.6:** Usar `FEATURE_NAMES` y descripciones estaticas definidas en `engineering.py`.
@@ -171,6 +176,10 @@ train_df = pd.read_parquet(settings.processed_dir / "train_features.parquet")
 stats_df = train_df[FEATURE_NAMES].describe().T[["mean", "std", "min", "max"]]
 del train_df
 ```
+
+4. **Tabla 3.18 (ablacion 31 vs 21):** Requiere ejecutar IF con 31 features y con 21 features (subset base), luego comparar AUC-ROC, AP, P@5%, EF y sus deltas.
+5. **Tabla 3.23 (tipologia de anomalias):** Requiere clustering o analisis de los top-5% anomalias para identificar los 9 tipos, con features dominantes por tipo.
+6. **Tabla 3.24 (perfil de riesgo por usuario):** Agregar scores de anomalia y metricas por `user_id` desde los resultados de prediccion.
 
 ---
 
@@ -216,10 +225,11 @@ def _save_figure(self, fig, name: str):
 | `pr_curves(scores_dict, proxy)` | Curvas Precision-Recall de 3 modelos + linea horizontal en `base_rate`. AP en leyenda. | `{model: scores_array}` |
 | `score_distributions(scores_dict, proxy)` | 3 subplots (uno por modelo). Histograma proxy+ (naranja) vs proxy- (azul) superpuesto con transparencia. | `{model: scores_array}` |
 | `grid_search_heatmap(grid_df)` | Heatmap 2D: `max_samples` (eje Y) x `n_estimators` (eje X). Valor = media de AUC sobre `max_features`. | `pd.DataFrame` |
-| `shap_summary(model, X_sample, feature_names)` | SHAP summary plot con top 10 features. TreeExplainer con fallback a KernelExplainer. | Modelo IF, array, lista de nombres |
+| `shap_summary(model, X_sample, feature_names)` | SHAP summary plot con top 15 features (de 31 totales). TreeExplainer con fallback a KernelExplainer. | Modelo IF, array, lista de nombres |
 | `enrichment_curve(scores_dict, proxy)` | Curva de enriquecimiento (lift) de k=0.1% a k=100%. Linea horizontal en EF=1. 3 modelos superpuestos. | `{model: scores_array}` |
 | `temporal_stability_plot(results)` | Serie temporal de AUC mensual por modelo. Puntos conectados, un color por modelo. | `dict` con resultados temporales |
-| `correlation_matrix(X, feature_names)` | Heatmap de correlaciones de Pearson entre features. Colores divergentes, anotaciones en celdas. | Array + nombres |
+| `correlation_matrix(X, feature_names)` | Heatmap de correlaciones de Pearson entre las 31 features. Colores divergentes, anotaciones en celdas. | Array + nombres |
+| `anomaly_type_distribution(type_results)` | Barplot horizontal: distribucion de 9 tipos de anomalia en el top-5% de scores. Anotacion con porcentaje y count. | `dict` de tipologia |
 | `posthoc_facility_anomaly_rate(posthoc_results)` | Barplot horizontal: top 15 centros ordenados por tasa de anomalias. Linea vertical en tasa base (5%). | `dict` post-hoc |
 | `posthoc_discount_by_manager(posthoc_results)` | Scatter plot: monto total de descuento (X) vs tasa de anomalias (Y) por actor; si no hay identidad validada, usar version agregada o pseudonimizada. Tamano de punto = n_transacciones. | `dict` post-hoc |
 | `posthoc_currency_distribution(posthoc_results)` | Barplot agrupado: anomalias vs normales por moneda, con tasa de anomalias anotada. | `dict` post-hoc |
@@ -256,10 +266,10 @@ La figura se omite gracefully sin error.
 
 ## Gate editorial y de gobernanza
 
-Antes de exportar tablas 3.21 y 3.23 o la figura `posthoc_discount_by_manager`, el orquestador debe revisar `results_posthoc.json`:
+Antes de exportar tablas 3.26 y 3.28 o la figura `posthoc_discount_by_manager`, el orquestador debe revisar `results_posthoc.json`:
 
 - `actor_identity_validated = true`: se permite exportar actores individuales, idealmente pseudonimizados si la tesis sale del ambito interno.
-- `actor_identity_validated = false`: queda prohibido exportar identificadores individuales. La tabla 3.21 debe degradarse a un resumen agregado de `paid_by_manager`, y la 3.23 a top centros con descuentos anomalos sin actor individual.
+- `actor_identity_validated = false`: queda prohibido exportar identificadores individuales. La tabla 3.26 debe degradarse a un resumen agregado de `paid_by_manager`, y la 3.28 a top centros con descuentos anomalos sin actor individual.
 
 Ademas:
 
@@ -276,8 +286,8 @@ Ademas:
 | Archivo | Contenido |
 |---------|-----------|
 | `src/fraud_detector/reporting/__init__.py` | Imports de `ThesisTableGenerator` y `ThesisFigureGenerator` |
-| `src/fraud_detector/reporting/latex_tables.py` | Clase con 18 metodos de generacion de tablas |
-| `src/fraud_detector/reporting/figures.py` | Clase con 11 metodos de generacion de figuras |
+| `src/fraud_detector/reporting/latex_tables.py` | Clase con 24 metodos de generacion de tablas |
+| `src/fraud_detector/reporting/figures.py` | Clase con 12 metodos de generacion de figuras |
 
 ### Tablas LaTeX
 
@@ -294,13 +304,18 @@ Ademas:
 | `output/tables/table_3_14_he4_comparison.tex` | 3.14 |
 | `output/tables/table_3_15_bootstrap_ci.tex` | 3.15 |
 | `output/tables/table_3_16_sensitivity_proxy.tex` | 3.16 |
-| `output/tables/table_3_17_sensitivity_feature17.tex` | 3.17 |
-| `output/tables/table_3_18_temporal_stability.tex` | 3.18 |
-| `output/tables/table_3_19_hypothesis_summary.tex` | 3.19 |
-| `output/tables/table_3_20_posthoc_facility.tex` | 3.20 |
-| `output/tables/table_3_21_posthoc_manager.tex` | 3.21 |
-| `output/tables/table_3_22_posthoc_currency.tex` | 3.22 |
-| `output/tables/table_3_23_posthoc_discount_pattern.tex` | 3.23 |
+| `output/tables/table_3_17_sensitivity_feature18.tex` | 3.17 |
+| `output/tables/table_3_18_ablation_33vs23.tex` | 3.18 |
+| `output/tables/table_3_19_temporal_stability.tex` | 3.19 |
+| `output/tables/table_3_20_hypothesis_summary.tex` | 3.20 |
+| `output/tables/table_3_21_metrics_by_role.tex` | 3.21 |
+| `output/tables/table_3_22_metrics_by_category.tex` | 3.22 |
+| `output/tables/table_3_23_anomaly_types.tex` | 3.23 |
+| `output/tables/table_3_24_user_risk_profile.tex` | 3.24 |
+| `output/tables/table_3_25_posthoc_facility.tex` | 3.25 |
+| `output/tables/table_3_26_posthoc_manager.tex` | 3.26 |
+| `output/tables/table_3_27_posthoc_currency.tex` | 3.27 |
+| `output/tables/table_3_28_posthoc_discount_pattern.tex` | 3.28 |
 
 ### Figuras
 
@@ -310,10 +325,11 @@ Ademas:
 | `output/figures/pr_curves` | `.pdf`, `.png` | Curvas Precision-Recall |
 | `output/figures/score_distributions` | `.pdf`, `.png` | Histogramas de scores |
 | `output/figures/grid_search_heatmap` | `.pdf`, `.png` | Heatmap IF (si CSV existe) |
-| `output/figures/shap_summary` | `.pdf`, `.png` | SHAP top 10 features |
+| `output/figures/shap_summary` | `.pdf`, `.png` | SHAP top 15 features (de 31 totales) |
 | `output/figures/enrichment_curve` | `.pdf`, `.png` | Curva de enriquecimiento |
 | `output/figures/temporal_stability` | `.pdf`, `.png` | AUC mensual |
-| `output/figures/correlation_matrix` | `.pdf`, `.png` | Correlacion entre features |
+| `output/figures/correlation_matrix` | `.pdf`, `.png` | Correlacion entre 31 features |
+| `output/figures/anomaly_type_distribution` | `.pdf`, `.png` | Distribucion de 9 tipos de anomalia en top-5% |
 | `output/figures/posthoc_facility_anomaly_rate` | `.pdf`, `.png` | Tasa de anomalias por centro (top 15) |
 | `output/figures/posthoc_discount_by_manager` | `.pdf`, `.png` | Descuento vs anomalias por manager |
 | `output/figures/posthoc_currency_distribution` | `.pdf`, `.png` | Distribucion de anomalias por moneda |

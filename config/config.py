@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # ── Parallelism ──────────────────────────────────────────────
     n_jobs: int = -1
 
+    # ── Currency Normalization ─────────────────────────────────
+    exchange_rates_path: str = "data/external/exchange_rates.csv"
+    reference_currency: str = "USD"
+
     # ── ClickHouse ───────────────────────────────────────────────
     clickhouse_host: str = "localhost"
     clickhouse_port: int = Field(default=8443, ge=1, le=65535)
@@ -162,6 +166,10 @@ class Settings(BaseSettings):
     @property
     def logs_path(self) -> Path:
         return self.project_root / self.logs_dir
+
+    @property
+    def exchange_rates_file(self) -> Path:
+        return self.project_root / self.exchange_rates_path
 
     # ── Path helpers ─────────────────────────────────────────────
 

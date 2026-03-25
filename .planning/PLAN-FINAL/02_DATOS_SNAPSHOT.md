@@ -163,7 +163,7 @@ def test_atomic_write_survives_interruption():
 
 ### Archivo: `src/fraud_detector/data/loader.py`
 
-**Eliminar:** Clase `DataLoader` completa, funcion `split_data()`.
+**Eliminar:** la implementacion legacy del loader y la funcion legacy de particionado temporal.
 
 **Nueva clase:** `DataManager` (fachada que orquesta clases especializadas)
 

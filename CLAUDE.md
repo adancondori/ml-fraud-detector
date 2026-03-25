@@ -2,86 +2,109 @@
 
 Este archivo proporciona contexto a Claude Code sobre el proyecto ML Fraud Detector.
 
-## Descripción del Proyecto
+## Descripcion del Proyecto
 
-Sistema de detección de fraude utilizando Machine Learning con arquitectura modular. El proyecto está diseñado para un entorno académico (tesis/master) y utiliza ClickHouse como base de datos.
+Pipeline de deteccion de **anomalias transaccionales** (no supervisado) para la tesis de maestria UAGRM. Evalua Isolation Forest como modelo principal, comparado contra LOF y One-Class SVM, usando un proxy de reembolso para evaluacion (nunca para entrenamiento).
 
-## Stack Tecnológico
+**Empresa:** TechSport Inc. (pseudonimo)
+**Datos:** 6.784.696 transacciones depuradas (gestion 2025) desde ClickHouse
+**Proxy estricto:** status IN ('totally_refunded', 'refunded_to_credit') = 6.33%
+
+## Stack Tecnologico
 
 - **Python 3.9+** con entorno virtual en `venv/`
-- **ML**: scikit-learn, XGBoost, LightGBM, imbalanced-learn
-- **Data**: pandas, numpy, ClickHouse
-- **Tracking**: MLflow
+- **ML**: scikit-learn (IsolationForest, LOF, OneClassSVM)
+- **Data**: pandas, numpy, ClickHouse (clickhouse-connect)
 - **Config**: Pydantic + python-dotenv
 - **Logging**: Loguru
-- **Explainability**: SHAP, LIME
+- **Explainability**: SHAP
 
 ## Estructura del Proyecto
 
 ```
-src/fraud_detector/       # Código fuente principal
+src/fraud_detector/       # Codigo fuente principal
 ├── data/                 # Loaders y conectores (ClickHouse)
-├── features/             # Preprocesamiento y feature engineering
-├── models/               # Entrenamiento de modelos
-├── evaluation/           # Métricas de evaluación
-└── utils/                # Logger y utilidades
+├── features/             # Feature engineering (33 features, 8 grupos A-H)
+├── models/               # Entrenamiento no supervisado (IF, LOF, OC-SVM)
+├── evaluation/           # Metricas, hipotesis (HE1-HE4), post-hoc, segmentos
+└── utils/                # Logger, CurrencyNormalizer, utilidades
 
-config/                   # Configuración con Pydantic
-scripts/                  # Scripts de utilidad (conexión DB, exploración)
+config/                   # Configuracion con Pydantic
+scripts/                  # Scripts de utilidad (extraccion, verificacion)
 notebooks/                # Jupyter notebooks
 tests/                    # Tests unitarios
+data/processed/           # Parquets (train, val, test, warm)
+output/                   # Modelos, scores, tablas LaTeX, figuras
+.planning/PLAN-FINAL/     # Plan detallado de implementacion (13 documentos)
 ```
 
 ## Comandos Frecuentes
 
 ```bash
-# Activar entorno virtual
 source venv/bin/activate
 
-# Ejecutar prueba rápida de Random Forest
-python run_simple_rf.py
-
-# Probar conexión a ClickHouse
-python scripts/test_clickhouse_connection.py
+# Extraccion de datos
+python scripts/extract_full_dataset.py
+python scripts/verify_counts.py
 
 # Tests
-make test                 # o: pytest --cov=src/fraud_detector
-
-# Formateo y linting
+make test                 # pytest --cov=src/fraud_detector
 make format               # Black + isort
 make lint                 # Flake8
-make type-check           # Mypy
 
-# MLflow UI
-make mlflow               # o: mlflow ui --port 5000
-
-# Jupyter notebooks
+# Notebooks
 make notebook
 ```
 
-## Configuración
+## 33 Features (8 grupos)
 
-- Las variables de entorno están en `.env` (copiadas de `.env.example`)
-- La configuración se valida con Pydantic en `config/config.py`
-- Variables importantes: `ENVIRONMENT`, `MODEL_TYPE`, `RANDOM_SEED`, `LOG_LEVEL`
-- Credenciales de ClickHouse: `CH_HOST`, `CH_PORT`, `CH_USER`, `CH_PASSWORD`, `CH_DATABASE`
+| Grupo | Features | Nums |
+|-------|----------|------|
+| A) Transaccionales | reservation_paid_out, log_amount, amount_usd_ratio, discount_ratio, has_tip, is_free | #1-6 |
+| B) Temporales | hour_sin, hour_cos, day_of_week, is_weekend, is_off_hours | #7-11 |
+| C) Velocidad | user_txn_count_1h/24h, time_since_last_txn, user_amount_24h | #12-15 |
+| D) Comportamiento | user_distinct_facilities_30d, user_distinct_methods, user_reversal_ratio_30d*, user_account_age_days, user_discount_ratio_30d, user_free_pct_30d | #16-21 |
+| E) Contextuales | facility_avg_amount, amount_facility_ratio | #22-23 |
+| F) Credito/Flujo | is_club_credit, user_debit_count_30d, user_debit_amount_30d, credit_flow_ratio | #24-27 |
+| G) Rol/Staff | is_staff, paid_by_manager, staff_amount_zscore | #28-30 |
+| H) Diversidad Operacional | category_entropy_30d, user_reversal_count_30d, user_merchandise_ratio_30d | #31-33 |
 
-## Convenciones de Código
+*Feature #18 (user_reversal_ratio_30d): correlacion mecanica con proxy. Analisis de sensibilidad obligatorio (delta AUC < 0.02).
 
-- Usar `logger` de `fraud_detector.utils.logger` en lugar de `print()`
-- Type hints requeridos
-- Formateo con Black (line-length=100)
-- Imports ordenados con isort (profile black)
-- Pre-commit hooks configurados
+Variantes: IF-33 (principal), IF-32 (sin F18), IF-23 (ablacion grupos F,G,H).
 
-## Datos
+## Relacion con el Proyecto Tesis-Latex
 
-- Los datos crudos van en `data/raw/`
-- Los datos procesados van en `data/processed/`
-- Conexión a ClickHouse configurada en `src/fraud_detector/data/clickhouse_connector.py`
+El proyecto `Tesis-Latex/` (`../Tesis-Latex/`) es la **guia base academica** del trabajo de investigacion: define el marco teorico, la metodologia (Sampieri), las hipotesis (HE1-HE4) y la estructura formal requerida por la UAGRM para la presentacion del perfil y la defensa de tesis. Su funcion es exclusivamente documental y academica.
 
-## Modelos
+Este proyecto (`ml-fraud-detector/`) es la **implementacion tecnica completa** que va mas alla del alcance academico:
 
-- Modelos guardados en `models/saved_models/`
-- Experimentos en `models/experiments/`
-- Tracking con MLflow (experimento: "fraud-detection")
+| Aspecto | Tesis-Latex (academico) | ml-fraud-detector (tecnico) |
+|---------|------------------------|----------------------------|
+| Proposito | Documento formal de investigacion para defensa de tesis | Pipeline operativo de deteccion de anomalias |
+| Alcance | 3 modelos (IF, LOF, OC-SVM), metricas basicas | Mismos modelos + optimizacion avanzada, SHAP, perfiles de riesgo por usuario |
+| Resultado | PDF/DOCX con tablas de resultados | Modelos entrenados, scores, alertas, artefactos MLflow |
+| Features | Describe 33 features conceptualmente | Implementa extraccion, transformacion y validacion end-to-end |
+| Datos | Cita cifras y distribuciones | Conecta a ClickHouse, extrae, depura y particiona 6.7M+ registros |
+| Reproducibilidad | Describe el procedimiento | Pipeline reproducible con Makefile, configs, seeds fijos |
+
+**En resumen:** la tesis guia *que* evaluar y *por que*; este proyecto implementa *como* hacerlo y extiende el alcance hacia un sistema de deteccion funcional que pueda orientar decisiones operativas reales en TechSport.
+
+## Restricciones Criticas
+
+- **NO supervisado**: Modelos entrenan SIN etiquetas; proxy SOLO para evaluacion
+- **NO causal**: Usar "asociacion", "capacidad discriminativa", nunca "predice"
+- **FINAL obligatorio** en queries ClickHouse (SharedReplacingMergeTree)
+- **Anti-leakage**: Ventanas rolling excluyen fila actual; fit solo en train
+- **Proxy != fraude**: El proxy de reembolso NO captura insider fraud
+- **Test intocable**: No usar test set para seleccion de hiperparametros
+- **Normalizacion USD**: Montos deben normalizarse a USD antes de feature engineering (21 monedas, 13 gateways)
+
+## Datos Extraidos
+
+| Split | Filas | Periodo |
+|-------|-------|---------|
+| Warm | 419,820 | Dic 2024 |
+| Train | 3,137,086 | Ene-Jun 2025 |
+| Val | 1,130,118 | Jul-Ago 2025 |
+| Test | 2,517,492 | Sep-Dic 2025 |

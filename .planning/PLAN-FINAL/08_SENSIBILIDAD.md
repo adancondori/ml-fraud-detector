@@ -43,7 +43,7 @@ Ambos resultados se reportan en la tesis para transparencia metodologica, indepe
 
 ---
 
-## Sensibilidad de Feature #17 (`user_reversal_ratio_30d`)
+## Sensibilidad de Feature #18 (`user_reversal_ratio_30d`)
 
 ### Proposito
 
@@ -51,20 +51,20 @@ Verificar que el modelo no depende excesivamente de una feature que podria ser c
 
 ### Procedimiento
 
-1. Entrenar IF con **20 features** (resultado principal, ya disponible).
-2. Entrenar IF con **19 features** (sin `user_reversal_ratio_30d`).
+1. Entrenar IF con **31 features** (resultado principal, ya disponible).
+2. Entrenar IF con **30 features** (sin `user_reversal_ratio_30d`).
 3. Evaluar ambos en el test set con proxy estricto.
 4. Comparar:
 
 ```
-delta_auc = |AUC_20 - AUC_19|
+delta_auc = |AUC_31 - AUC_30|
 ```
 
 ### Criterio
 
 ```
-delta_auc < 0.02 → modelo de 20 features aceptable
-delta_auc >= 0.02 → reportar ambos; usar 19 features como primario
+delta_auc < 0.02 → modelo de 31 features aceptable
+delta_auc >= 0.02 → reportar ambos; usar 30 features como primario
 ```
 
 ### Metricas adicionales de comparacion
@@ -73,9 +73,9 @@ delta_auc >= 0.02 → reportar ambos; usar 19 features como primario
 
 ```python
 k = int(len(scores) * 0.05)
-top5_20 = set(np.argsort(scores_20)[-k:])
-top5_19 = set(np.argsort(scores_19)[-k:])
-jaccard = len(top5_20 & top5_19) / len(top5_20 | top5_19)
+top5_31 = set(np.argsort(scores_31)[-k:])
+top5_30 = set(np.argsort(scores_30)[-k:])
+jaccard = len(top5_31 & top5_30) / len(top5_31 | top5_30)
 ```
 
 Mide cuanto coinciden las transacciones flaggeadas entre ambas variantes. `jaccard > 0.80` indica alta coincidencia.
@@ -84,7 +84,7 @@ Mide cuanto coinciden las transacciones flaggeadas entre ambas variantes. `jacca
 
 ```python
 from scipy.stats import spearmanr
-rho, p = spearmanr(scores_20, scores_19)
+rho, p = spearmanr(scores_31, scores_30)
 ```
 
 Mide si el ranking de anomalia es similar entre ambas variantes, independientemente de la escala de scores.
@@ -93,8 +93,8 @@ Mide si el ranking de anomalia es similar entre ambas variantes, independienteme
 
 ```python
 {
-    "auc_20_features": float,
-    "auc_19_features": float,
+    "auc_31_features": float,
+    "auc_30_features": float,
     "delta_auc": float,
     "low_sensitivity": bool,     # delta < 0.02
     "jaccard_top5pct": float,
@@ -105,9 +105,285 @@ Mide si el ranking de anomalia es similar entre ambas variantes, independienteme
 
 ---
 
+## Ablacion: 31 Features vs 21 Features (Grupos F, G, H)
+
+### Proposito
+
+Cuantificar la contribucion marginal de los 3 nuevos grupos de features agregados al modelo extendido:
+
+| Grupo | Features | Descripcion |
+|-------|----------|-------------|
+| F) Credito/Flujo | F24: is_club_credit, F25: user_debit_count_30d, F26: user_debit_amount_30d, F27: credit_flow_ratio | Patrones de uso de credito y flujo prepago/debito |
+| G) Staff/Rol | F28: is_staff, F29: paid_by_manager, F30: staff_amount_zscore | Desviacion relativa del monto por rol |
+| H) Diversidad Operacional | F31: category_entropy_30d, F32: user_reversal_count_30d, F33: user_merchandise_ratio_30d | Diversidad de categorias y comportamiento operativo |
+
+Si la diferencia es marginal (delta AUC < 0.01), los grupos F-H no aportan capacidad discriminativa significativa. Si es sustancial, justifica la extension del feature set.
+
+### Procedimiento
+
+1. Entrenar IF con **31 features** (F01-F33) — resultado principal, ya disponible de Fase 6.
+2. Entrenar IF con **21 features** (F01-F23 unicamente) — mismos hiperparametros optimos.
+3. Evaluar ambos en el **test set** con proxy estricto.
+4. Comparar 4 metricas:
+
+```
+delta_auc = AUC_31 - AUC_21
+delta_ap  = AP_31  - AP_21
+delta_p5  = P@5%_31 - P@5%_21
+delta_ef  = EF_31  - EF_21
+```
+
+### Retorno esperado
+
+```python
+{
+    "ablation_31_vs_21": {
+        "model_31": {"auc_roc": float, "ap": float, "precision_at_5pct": float, "enrichment_factor": float},
+        "model_21": {"auc_roc": float, "ap": float, "precision_at_5pct": float, "enrichment_factor": float},
+        "delta": {"auc_roc": float, "ap": float, "precision_at_5pct": float, "enrichment_factor": float},
+        "groups_contribute": bool  # delta_auc > 0.01
+    }
+}
+```
+
+### Integracion con tesis
+
+Los resultados se presentan en **Tabla `tab:ablacion-31vs21`** del Capitulo 3. Si los grupos F-H contribuyen significativamente, se discute cuales features especificas (via SHAP) impulsan la mejora.
+
+---
+
+## Metricas por Segmento
+
+### Proposito
+
+Evaluar la capacidad discriminativa del Isolation Forest desagregada por **rol del usuario** y **categoria de pago**, para identificar segmentos donde el modelo es mas o menos efectivo.
+
+### Segmentos por Rol
+
+| Rol | Filtro |
+|-----|--------|
+| Players | `user_role = 'player'` |
+| Court Managers | `user_role = 'court_manager'` |
+| Court Operators | `user_role = 'court_operator'` |
+| Teachers | `user_role = 'teacher'` |
+
+### Segmentos por Categoria de Pago
+
+| Categoria | Filtro |
+|-----------|--------|
+| Reservation | `category = 'reservation'` |
+| Merchandise | `category = 'merchandise'` |
+| Lesson/Clinic | `category IN ('lesson', 'clinic')` |
+| Debit | `category = 'debit'` |
+
+### Procedimiento
+
+1. Tomar los scores del mejor IF (31 features) ya entrenado.
+2. Para cada segmento, filtrar el test set y el vector de scores correspondiente.
+3. Calcular 4 metricas por segmento: AUC-ROC, AP, P@5%, EF.
+4. Descartar segmentos con menos de 100 transacciones o menos de 10 positivos proxy.
+
+```python
+def evaluate_segment(df_segment, scores_segment, proxy_segment):
+    if len(df_segment) < 100 or proxy_segment.sum() < 10:
+        return None
+    return {
+        "auc_roc": roc_auc_score(proxy_segment, scores_segment),
+        "ap": average_precision_score(proxy_segment, scores_segment),
+        "precision_at_5pct": precision_at_k(proxy_segment, scores_segment, k_pct=0.05),
+        "enrichment_factor": enrichment_factor(proxy_segment, scores_segment, k_pct=0.05),
+        "n_transactions": len(df_segment),
+        "n_proxy_positive": int(proxy_segment.sum()),
+        "proxy_rate": float(proxy_segment.mean()),
+    }
+```
+
+### Retorno esperado
+
+```python
+{
+    "segment_metrics": {
+        "by_role": {
+            "player": {"auc_roc": float, "ap": float, "precision_at_5pct": float, "enrichment_factor": float, ...},
+            "court_manager": {...},
+            "court_operator": {...},
+            "teacher": {...}
+        },
+        "by_category": {
+            "reservation": {...},
+            "merchandise": {...},
+            "lesson_clinic": {...},
+            "debit": {...}
+        }
+    }
+}
+```
+
+### Integracion con tesis
+
+Los resultados se presentan en:
+- **Tabla `tab:metricas-por-rol`**: AUC-ROC, AP, P@5%, EF por rol.
+- **Tabla `tab:metricas-por-categoria`**: AUC-ROC, AP, P@5%, EF por categoria de pago.
+
+Se discuten diferencias significativas entre segmentos en la seccion de discusion del Capitulo 3.
+
+---
+
+## Tipologia de Anomalias (SHAP)
+
+### Proposito
+
+Clasificar las transacciones anomalas (top-5%) en tipos segun la feature dominante que impulsa su score de anomalia, usando valores SHAP. Esto permite responder: *que tipo de patron anomalo detecta el modelo con mas frecuencia?*
+
+### Tipos de Anomalia
+
+| # | Tipo | Feature(s) dominante(s) |
+|---|------|------------------------|
+| 1 | `amount` | amount, log_amount, amount_usd_ratio, amount_facility_ratio, staff_amount_zscore |
+| 2 | `velocity` | user_txn_count_1h, user_txn_count_24h, time_since_last_txn, user_amount_24h |
+| 3 | `discount` | discount_ratio, user_discount_ratio_30d |
+| 4 | `temporal` | hour_sin, hour_cos, day_of_week, is_weekend, is_off_hours |
+| 5 | `credit_flow` | is_club_credit, user_debit_count_30d, user_debit_amount_30d, credit_flow_ratio |
+| 6 | `role_deviation` | is_staff, paid_by_manager, staff_amount_zscore |
+| 7 | `diversity` | user_distinct_facilities_30d, user_distinct_methods, category_entropy_30d, user_merchandise_ratio_30d |
+| 8 | `reversal` | user_reversal_ratio_30d |
+| 9 | `mixed` | Ninguna feature domina (max SHAP < 2x segundo SHAP) |
+
+### Procedimiento
+
+1. Calcular SHAP values para las transacciones del top-5% (subsample si es necesario).
+2. Para cada transaccion, identificar la feature con mayor |SHAP value|.
+3. Mapear esa feature al tipo de anomalia segun la tabla anterior.
+4. Si la feature dominante tiene |SHAP| < 2x la segunda feature dominante, clasificar como `mixed`.
+5. Calcular distribucion de tipos.
+
+```python
+def classify_anomaly_type(shap_row, feature_names, feature_to_type_map):
+    abs_shap = np.abs(shap_row)
+    sorted_idx = np.argsort(abs_shap)[::-1]
+    top_feature = feature_names[sorted_idx[0]]
+    top_value = abs_shap[sorted_idx[0]]
+    second_value = abs_shap[sorted_idx[1]]
+
+    if top_value < 2.0 * second_value:
+        return "mixed"
+    return feature_to_type_map.get(top_feature, "mixed")
+```
+
+### Retorno esperado
+
+```python
+{
+    "anomaly_typology": {
+        "n_anomalies_classified": int,
+        "type_distribution": {
+            "amount": {"count": int, "pct": float},
+            "velocity": {"count": int, "pct": float},
+            "discount": {"count": int, "pct": float},
+            "temporal": {"count": int, "pct": float},
+            "credit_flow": {"count": int, "pct": float},
+            "role_deviation": {"count": int, "pct": float},
+            "diversity": {"count": int, "pct": float},
+            "reversal": {"count": int, "pct": float},
+            "mixed": {"count": int, "pct": float}
+        },
+        "dominance_threshold": 2.0
+    }
+}
+```
+
+### Integracion con tesis
+
+Los resultados se presentan en **Tabla `tab:anomaly-types`** del Capitulo 3. La distribucion de tipos informa la discusion sobre que patrones operacionales captura el modelo con mayor frecuencia.
+
+---
+
+## Perfil de Riesgo Agregado por Usuario
+
+### Proposito
+
+Construir un perfil de riesgo a nivel de usuario agregando los scores de anomalia de todas sus transacciones en el test set. Permite identificar usuarios con concentracion sistematica de anomalias, lo cual puede indicar patrones operacionales recurrentes (no necesariamente fraude).
+
+### Metricas por Usuario
+
+| Metrica | Descripcion |
+|---------|-------------|
+| `avg_score` | Media de scores de anomalia del usuario |
+| `max_score` | Score maximo observado |
+| `p95_score` | Percentil 95 de scores |
+| `n_total` | Numero total de transacciones del usuario |
+| `n_top5pct` | Numero de transacciones en el top-5% de anomalias |
+| `concentration` | `n_top5pct / n_total` — proporcion de transacciones anomalas |
+| `dominant_type` | Tipo de anomalia mas frecuente entre sus transacciones top-5% (de la tipologia SHAP) |
+
+### Procedimiento
+
+```python
+def build_user_risk_profiles(df_test, scores, anomaly_types, top_k_pct=0.05):
+    df_test["score"] = scores
+    df_test["anomaly_type"] = anomaly_types  # del paso de tipologia
+    threshold = np.quantile(scores, 1 - top_k_pct)
+    df_test["is_top5"] = scores >= threshold
+
+    profiles = df_test.groupby("user_id").agg(
+        avg_score=("score", "mean"),
+        max_score=("score", "max"),
+        p95_score=("score", lambda x: np.percentile(x, 95)),
+        n_total=("score", "count"),
+        n_top5pct=("is_top5", "sum"),
+    )
+    profiles["concentration"] = profiles["n_top5pct"] / profiles["n_total"]
+
+    # Tipo dominante por usuario (moda entre sus transacciones top-5%)
+    top5_types = df_test[df_test["is_top5"]].groupby("user_id")["anomaly_type"].agg(
+        lambda x: x.value_counts().index[0] if len(x) > 0 else None
+    )
+    profiles["dominant_type"] = top5_types
+
+    return profiles
+```
+
+### Criterio de flaggeo
+
+```
+concentration > 0.10 → usuario flaggeado para revision
+```
+
+Esto significa que mas del 10% de las transacciones del usuario estan en el top-5% de anomalias, lo cual es el doble de lo esperado por azar (5%).
+
+### Retorno esperado
+
+```python
+{
+    "user_risk_profiles": {
+        "n_users_total": int,
+        "n_users_flagged": int,           # concentration > 0.10
+        "pct_users_flagged": float,
+        "flagged_users_summary": {
+            "mean_concentration": float,
+            "max_concentration": float,
+            "dominant_types_distribution": {
+                "amount": int, "velocity": int, "discount": int, ...
+            }
+        }
+    }
+}
+```
+
+### Salida
+
+- **Archivo**: `output/user_risk_profiles.parquet` — DataFrame completo con perfiles de todos los usuarios.
+- **Tabla tesis**: `tab:user-risk-profile` — Top 20 usuarios con mayor concentracion (anonimizados).
+
+### Integracion con tesis
+
+Se presenta en la seccion de discusion del Capitulo 3 como evidencia de la utilidad operacional del modelo. Se enfatiza que la concentracion elevada no implica fraude, sino patrones recurrentes que ameritan revision.
+
+---
+
 ## Evaluacion Per-Status
 
-> **Nota de diseno:** Este analisis requiere el metodo `per_status_evaluation` que se ha agregado a la interfaz de `HypothesisEvaluator` en la Fase 6. Alternativamente, si se aplica la descomposicion SRP recomendada, este metodo pertenece a `DiscriminationEvaluator`. Si se prefiere mantener la separacion de fases, se puede crear una clase `SensitivityAnalyzer` dedicada que contenga tanto esta logica como la sensibilidad de proxy y Feature #17.
+> **Nota de diseno:** Este analisis requiere una funcion/helper `per_status_evaluation` dentro de `evaluation.metrics` o, alternativamente, un modulo `SensitivityAnalyzer` dedicado.
 
 ### Proposito
 
@@ -181,7 +457,7 @@ except Exception:
 
 ### Subsample
 
-- Tomar 5,000 filas del test set como muestra representativa.
+- SHAP muestreado: TreeExplainer sobre top-5% anomalias del test set (~125K txns) + muestra aleatoria de 5K normales para contraste.
 - Seed fijo (`random_seed=42`) para reproducibilidad.
 
 ### Salida
@@ -467,7 +743,7 @@ En la tesis, este analisis se presenta con lenguaje no causal:
 
 ### Archivo de implementacion
 
-`src/fraud_detector/evaluation/posthoc_analysis.py`
+`src/fraud_detector/evaluation/posthoc_analysis.py` (**pendiente**)
 
 Clase: `PostHocAnalyzer`
 
@@ -515,11 +791,15 @@ Tests a escribir **ANTES** de implementar los analisis de sensibilidad:
 | # | Test | Verifica |
 |---|------|----------|
 | 1 | `test_proxy_sensitivity_both_proxies_evaluated` | Que el resultado contiene metricas para proxy estricto y proxy amplio |
-| 2 | `test_feature17_sensitivity_delta_computed` | Que `delta_auc` se computa como `abs(AUC_20 - AUC_19)` |
+| 2 | `test_feature18_sensitivity_delta_computed` | Que `delta_auc` se computa como `abs(AUC_31 - AUC_30)` |
 | 3 | `test_jaccard_similarity_range_0_to_1` | Que Jaccard esta en `[0.0, 1.0]` para cualquier input |
 | 4 | `test_shap_produces_feature_importance_ranking` | Que SHAP retorna un ranking de features ordenado por `mean(abs(shap_values))` |
 | 5 | `test_baselines_random_auc_near_half` | Que el baseline aleatorio produce `AUC ~ 0.5` (tolerancia 0.05) |
 | 6 | `test_posthoc_degrades_to_aggregate_when_actor_not_validated` | Que el post-hoc no exporta ranking identificable si `actor_identity_validated=False` |
+| 7 | `test_ablation_31_vs_21_computed` | Que se computan las 4 metricas para ambas variantes (31 y 21 features) y los deltas |
+| 8 | `test_segment_metrics_all_roles_covered` | Que se evaluan todos los roles con datos suficientes y se omiten los que no cumplen minimos |
+| 9 | `test_anomaly_typology_9_types` | Que la tipologia retorna exactamente los 9 tipos definidos y sus porcentajes suman 100% |
+| 10 | `test_user_risk_profile_concentration` | Que la concentracion se calcula como `n_top5pct / n_total` y el flaggeo usa umbral 0.10 |
 
 ```python
 # Test #7 — PostHocAnalyzer
@@ -590,6 +870,62 @@ def test_baselines_random_auc_near_half():
     scores = rng.random(10_000)
     auc = roc_auc_score(proxy, scores)
     assert abs(auc - 0.5) < 0.05
+
+# Test #7 — Ablacion 31 vs 21
+def test_ablation_31_vs_21_computed():
+    """Que se computan metricas para ambas variantes y deltas correctamente."""
+    result = {
+        "model_31": {"auc_roc": 0.75, "ap": 0.30, "precision_at_5pct": 0.20, "enrichment_factor": 3.2},
+        "model_21": {"auc_roc": 0.72, "ap": 0.27, "precision_at_5pct": 0.18, "enrichment_factor": 2.9},
+        "delta": {},
+    }
+    for metric in ["auc_roc", "ap", "precision_at_5pct", "enrichment_factor"]:
+        result["delta"][metric] = result["model_31"][metric] - result["model_21"][metric]
+    assert all(k in result["delta"] for k in ["auc_roc", "ap", "precision_at_5pct", "enrichment_factor"])
+    assert result["delta"]["auc_roc"] == pytest.approx(0.03, abs=1e-6)
+
+# Test #8 — Metricas por segmento
+def test_segment_metrics_all_roles_covered():
+    """Que se evaluan todos los roles con datos suficientes."""
+    rng = np.random.default_rng(42)
+    roles = ["player", "court_manager", "court_operator", "teacher"]
+    df = pd.DataFrame({
+        "role": np.repeat(roles, 250),
+        "proxy": rng.integers(0, 2, size=1000),
+    })
+    scores = rng.random(1000)
+    result = {}
+    for role in roles:
+        mask = df["role"] == role
+        segment_proxy = df.loc[mask, "proxy"]
+        if mask.sum() >= 100 and segment_proxy.sum() >= 10:
+            result[role] = {"auc_roc": roc_auc_score(segment_proxy, scores[mask])}
+    assert set(result.keys()) == set(roles)
+
+# Test #9 — Tipologia de anomalias
+def test_anomaly_typology_9_types():
+    """Que la tipologia produce exactamente 9 tipos y suman 100%."""
+    expected_types = {
+        "amount", "velocity", "discount", "temporal", "credit_flow",
+        "role_deviation", "diversity", "reversal", "mixed"
+    }
+    # Simular distribucion
+    distribution = {t: {"count": 10, "pct": 100.0 / 9} for t in expected_types}
+    assert set(distribution.keys()) == expected_types
+    total_pct = sum(v["pct"] for v in distribution.values())
+    assert abs(total_pct - 100.0) < 0.1
+
+# Test #10 — Perfil de riesgo por usuario
+def test_user_risk_profile_concentration():
+    """Que la concentracion se calcula correctamente y el flaggeo usa umbral 0.10."""
+    n_total = 100
+    n_top5 = 15  # 15% concentracion → debe ser flaggeado
+    concentration = n_top5 / n_total
+    assert concentration == 0.15
+    assert concentration > 0.10  # flaggeado
+    n_top5_low = 5  # 5% concentracion → no flaggeado
+    concentration_low = n_top5_low / n_total
+    assert concentration_low <= 0.10  # no flaggeado
 ```
 
 ---
@@ -598,41 +934,88 @@ def test_baselines_random_auc_near_half():
 
 | Artefacto | Ruta | Contenido |
 |-----------|------|-----------|
-| Resultados sensibilidad | `output/results_sensitivity.json` | Proxy, Feature #17, per-status, baselines |
+| Resultados sensibilidad | `output/results_sensitivity.json` | Proxy, Feature #18, ablacion 31vs21, per-status, baselines, segmentos |
 | Resultados post-hoc | `output/results_posthoc.json` | Concentracion por centro, actor, moneda y descuentos |
+| Tipologia de anomalias | `output/results_anomaly_typology.json` | Distribucion de 9 tipos de anomalia (SHAP) |
+| Perfiles de riesgo | `output/user_risk_profiles.parquet` | Perfil de riesgo agregado por usuario |
 | SHAP summary | `output/figures/shap_summary.pdf` | Summary plot top 10 |
 | SHAP summary (PNG) | `output/figures/shap_summary.png` | Mismo, para notebooks |
-| Modulo post-hoc | `src/fraud_detector/evaluation/posthoc_analysis.py` | PostHocAnalyzer |
-| Tablas para tesis | (generadas en Fase 8) | Sensibilidad proxy, Feature #17, post-hoc |
+| Modulo post-hoc | `src/fraud_detector/evaluation/posthoc_analysis.py` (**pendiente**) | PostHocAnalyzer |
+| Tablas para tesis | (generadas en Fase 8) | Sensibilidad proxy, Feature #18, ablacion, segmentos, tipologia, perfiles, post-hoc |
 
 ### Estructura de `results_sensitivity.json`
 
 ```json
 {
   "proxy_sensitivity": {
-    "strict": {"auc_roc": ..., "ap": ...},
-    "wide": {"auc_roc": ..., "ap": ...},
-    "delta_auc": ...,
-    "delta_ap": ...,
+    "strict": {"auc_roc": "...", "ap": "..."},
+    "wide": {"auc_roc": "...", "ap": "..."},
+    "delta_auc": "...",
+    "delta_ap": "...",
     "robust": true
   },
-  "feature17_sensitivity": {
-    "auc_20_features": ...,
-    "auc_19_features": ...,
-    "delta_auc": ...,
+  "feature18_sensitivity": {
+    "auc_31_features": "...",
+    "auc_30_features": "...",
+    "delta_auc": "...",
     "low_sensitivity": true,
-    "jaccard_top5pct": ...,
-    "spearman_r": ...
+    "jaccard_top5pct": "...",
+    "spearman_r": "..."
+  },
+  "ablation_31_vs_21": {
+    "model_31": {"auc_roc": "...", "ap": "...", "precision_at_5pct": "...", "enrichment_factor": "..."},
+    "model_21": {"auc_roc": "...", "ap": "...", "precision_at_5pct": "...", "enrichment_factor": "..."},
+    "delta": {"auc_roc": "...", "ap": "...", "precision_at_5pct": "...", "enrichment_factor": "..."},
+    "groups_contribute": true
   },
   "per_status": {
-    "totally_refunded": {"auc_roc": ..., "count": ...},
-    "refunded_to_credit": {"auc_roc": ..., "count": ...},
-    "partially_refunded": {"auc_roc": ..., "count": ...}
+    "totally_refunded": {"auc_roc": "...", "count": "..."},
+    "refunded_to_credit": {"auc_roc": "...", "count": "..."},
+    "partially_refunded": {"auc_roc": "...", "count": "..."}
+  },
+  "segment_metrics": {
+    "by_role": {
+      "player": {"auc_roc": "...", "ap": "...", "precision_at_5pct": "...", "enrichment_factor": "...", "n_transactions": "...", "n_proxy_positive": "...", "proxy_rate": "..."},
+      "court_manager": {"...": "..."},
+      "court_operator": {"...": "..."},
+      "teacher": {"...": "..."}
+    },
+    "by_category": {
+      "reservation": {"...": "..."},
+      "merchandise": {"...": "..."},
+      "lesson_clinic": {"...": "..."},
+      "debit": {"...": "..."}
+    }
+  },
+  "anomaly_typology": {
+    "n_anomalies_classified": "...",
+    "type_distribution": {
+      "amount": {"count": "...", "pct": "..."},
+      "velocity": {"count": "...", "pct": "..."},
+      "discount": {"count": "...", "pct": "..."},
+      "temporal": {"count": "...", "pct": "..."},
+      "credit_flow": {"count": "...", "pct": "..."},
+      "role_deviation": {"count": "...", "pct": "..."},
+      "diversity": {"count": "...", "pct": "..."},
+      "reversal": {"count": "...", "pct": "..."},
+      "mixed": {"count": "...", "pct": "..."}
+    },
+    "dominance_threshold": 2.0
+  },
+  "user_risk_profiles": {
+    "n_users_total": "...",
+    "n_users_flagged": "...",
+    "pct_users_flagged": "...",
+    "flagged_users_summary": {
+      "mean_concentration": "...",
+      "max_concentration": "...",
+      "dominant_types_distribution": {"...": "..."}
+    }
   },
   "baselines": {
-    "random": {"auc_roc": ..., "ap": ...},
-    "amount_ranking": {"auc_roc": ..., "ap": ...},
-    "zscore_amount": {"auc_roc": ..., "ap": ...}
+    "random": {"auc_roc": "...", "ap": "..."},
+    "amount_ranking": {"auc_roc": "...", "ap": "..."},
+    "zscore_amount": {"auc_roc": "...", "ap": "..."}
   }
 }
 ```

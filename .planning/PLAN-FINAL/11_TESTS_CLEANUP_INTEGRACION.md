@@ -1,5 +1,7 @@
 # Fase 10: Tests, Limpieza e Integración con la Tesis
 
+> **Estado actual:** el repo ya consolida los tests implementados en `test_loader.py`, `test_features.py` y `test_pipeline_components.py`. Los apartados marcados como **PENDIENTE** describen cobertura futura para el orquestador, reporting y smoke tests end-to-end.
+
 Fase final que consolida la calidad del código, elimina artefactos obsoletos
 y conecta los resultados del pipeline con el documento de tesis en LaTeX.
 
@@ -109,7 +111,7 @@ def sample_proxy_labels():
 | Test                                      | Propósito                                                  |
 |-------------------------------------------|------------------------------------------------------------|
 | `test_fit_sets_statistics`                | Verificar que `fit()` calcula y almacena estadísticas      |
-| `test_transform_produces_20_features`     | Salida tiene exactamente 20 columnas de features           |
+| `test_transform_produces_31_features`     | Salida tiene exactamente 31 columnas de features (F06 y F21 eliminadas)  |
 | `test_transform_no_nans`                  | Sin NaN en la salida transformada                          |
 | `test_transform_without_fit_raises`       | Error claro si se transforma sin ajustar primero           |
 | `test_anti_leakage_velocity`              | Primera transacción de un usuario tiene `txn_count=0`      |
@@ -119,16 +121,19 @@ def sample_proxy_labels():
 | `test_cumulative_nunique_no_cross_group_leakage` | Conteo acumulativo no mezcla entre grupos            |
 | `test_split_boundary`                     | Fronteras correctas: Jun30→Jul1, Aug31→Sep1                |
 
-### test_preprocessor.py (NUEVO)
+### `test_pipeline_components.py` (preprocessor, models, metrics y currency)
 
 | Test                                      | Propósito                                                  |
 |-------------------------------------------|------------------------------------------------------------|
-| `test_fit_transform_shape`                | Dimensiones correctas tras fit_transform                   |
-| `test_output_dtype_float32`               | Salida en float32 para eficiencia                          |
-| `test_transform_without_fit_raises`       | Error si se transforma sin fit                             |
-| `test_save_load_roundtrip`                | Guardar y cargar produce resultados idénticos              |
-| `test_feature_names_preserved`            | Nombres de features se mantienen tras serialización        |
-| `test_missing_column_raises`              | Error claro si faltan columnas esperadas                   |
+| `test_fit_transform_shape_and_dtype`      | `fit_transform()` produce matriz con forma esperada y dtype eficiente |
+| `test_missing_feature_column_raises`      | Error claro si faltan columnas esperadas por el preprocessor |
+| `test_save_load_roundtrip`                | Guardar y cargar produce resultados equivalentes           |
+| `test_model_scores_shape`                 | IF, LOF y OC-SVM producen scores con dimensión correcta    |
+| `test_precision_and_enrichment`           | Precision@k y enrichment factor devuelven valores coherentes |
+| `test_evaluate_scores_keys`               | `evaluate_scores()` retorna las claves esperadas del contrato |
+| `test_bootstrap_ci_bounds`                | El IC bootstrap cumple `lower <= point_estimate <= upper`  |
+| `test_from_direct_rate_csv`               | `CurrencyNormalizer` interpreta correctamente CSV con `rate_to_usd` directo |
+| `test_from_clickhouse_snapshot_csv`       | `CurrencyNormalizer` soporta snapshot exportado desde ClickHouse |
 
 ### test_loader.py (NUEVO)
 
@@ -139,35 +144,7 @@ def sample_proxy_labels():
 | `test_assign_proxy_labels_invalid_raises` | Tipo de proxy inválido lanza error                         |
 | `test_downcast_preserves_data_integrity`  | Downcast de tipos no pierde datos                          |
 
-### test_models.py (MEJORADO)
-
-| Test                                      | Propósito                                                  |
-|-------------------------------------------|------------------------------------------------------------|
-| `test_train_isolation_forest`             | IF se entrena sin errores                                  |
-| `test_train_lof`                          | LOF se entrena sin errores                                 |
-| `test_train_ocsvm`                        | OC-SVM se entrena sin errores                              |
-| `test_scoring_shape`                      | Scores tienen dimensión correcta                           |
-| `test_anomalies_score_higher`             | Anomalías conocidas reciben scores más altos               |
-| `test_grid_search_returns_results`        | Grid search produce DataFrame de resultados                |
-| `test_save_load_scoring_equivalence`      | Modelo cargado produce mismos scores que original          |
-
-### test_metrics.py (MEJORADO)
-
-| Test                                      | Propósito                                                  |
-|-------------------------------------------|------------------------------------------------------------|
-| `test_he1_perfect_separation`             | HE1 pasa con separación perfecta                           |
-| `test_he2_perfect_auc`                    | AUC-ROC = 1.0 con discriminación perfecta                  |
-| `test_he3_perfect_enrichment`             | Enrichment Factor alto con separación perfecta             |
-| `test_he2_random_auc`                     | AUC-ROC ≈ 0.5 con scores aleatorios                       |
-| `test_bootstrap_ci_coherent`              | IC inferior ≤ puntual ≤ IC superior                        |
-| `test_compare_models`                     | Comparación entre modelos produce ranking                  |
-| `test_full_evaluation_keys`               | `results.json` contiene todas las claves esperadas         |
-| `test_edge_case_all_same_class`           | Manejo correcto cuando todos son misma clase               |
-| `test_edge_case_constant_scores`          | Manejo correcto con scores constantes                      |
-| `test_holm_bonferroni_correction`         | Corrección de Holm-Bonferroni aplicada correctamente       |
-| `test_topk_multiple_k_values`             | Top-k evaluado para múltiples valores de k                 |
-
-### test_reporting.py (NUEVO, smoke tests)
+### `test_reporting.py` (PENDIENTE, smoke tests)
 
 | Test                                      | Propósito                                                  |
 |-------------------------------------------|------------------------------------------------------------|
@@ -175,15 +152,15 @@ def sample_proxy_labels():
 | `test_figure_generates_pdf`               | Figura genera archivo PDF no vacío                         |
 | `test_latex_special_chars_escaped`        | Caracteres especiales LaTeX escapados correctamente        |
 
-### test_integration.py (NUEVO, `@pytest.mark.slow`)
+### `test_integration.py` (PENDIENTE, `@pytest.mark.slow`)
 
 - Dataset sintético de 200 filas → features → preprocessing → training → scoring → evaluation
 - **No requiere conexión a ClickHouse**
 - Valida el flujo completo end-to-end con datos controlados
 
-### test_pipeline.py (NUEVO — tests del orquestador)
+### `test_pipeline.py` (PENDIENTE — tests del orquestador)
 
-Tests unitarios para `run_pipeline.py` que validan la lógica de orquestación sin ejecutar el pipeline real:
+Tests unitarios para `run_pipeline.py` que validan la lógica de orquestación sin ejecutar el pipeline real. Este archivo aun no existe en el repo; queda como contrato para Fase 9.
 
 | Test                                           | Propósito                                                        |
 |------------------------------------------------|------------------------------------------------------------------|
@@ -256,7 +233,7 @@ def test_pipeline_smoke(tmp_path, sample_transactions):
 
 ### Apéndices
 - SQL de extracción
-- Catálogo de features (20 + 19 variantes)
+- Catálogo de 31 features (8 grupos, F06 y F21 eliminadas)
 - Configuración del pipeline
 
 ### Compilación final
@@ -269,7 +246,7 @@ pdflatex → biber → pdflatex → pdflatex
 ## Reproducibilidad
 
 - `pip freeze > requirements-lock.txt` después de la ejecución final
-- `PYTHONHASHSEED=42` establecido en `run_pipeline.py`
+- `PYTHONHASHSEED=42` establecido en `run_pipeline.py` cuando se implemente Fase 9
 - Todas las seeds explícitamente configuradas en cada componente
 
 ---
@@ -279,7 +256,7 @@ pdflatex → biber → pdflatex → pdflatex
 | #  | Criterio                                           | Verificación                          |
 |----|---------------------------------------------------|---------------------------------------|
 | 1  | `pytest tests/ -v` pasa                           | Todos los tests verdes                |
-| 2  | Test de integración pasa (sin ClickHouse)          | `@pytest.mark.slow` ejecutado         |
+| 2  | Test de integración pasa (sin ClickHouse)          | `@pytest.mark.slow` ejecutado cuando se implemente Fase 9 |
 | 3  | Todas las tablas LaTeX compilan                    | Sin errores de `pdflatex`             |
 | 4  | Todas las figuras PDF/PNG existen, tamaño > 0      | Verificación de filesystem            |
 | 5  | `results.json`, `results_sensitivity.json` y `results_posthoc.json` válidos y completos | Schema validation |
