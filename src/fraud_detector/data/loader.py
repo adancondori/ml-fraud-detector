@@ -51,29 +51,29 @@ SAFE_INT8_COLS = ["is_staff"]
 
 CANONICAL_SQL = """
 SELECT
-    p.id,
-    p.user_id,
-    p.effective_user_id,
-    p.facility_id,
-    p.facility_name,
-    p.created_at,
-    p.captured_at,
-    p.payment_method,
-    p.gateway,
-    p.source_enum,
-    p.status,
-    p.reservation_paid_out,
-    p.discount,
-    p.tax,
-    p.tip,
-    p.card_brand,
-    p.currency,
-    p.paid_by_manager,
-    p.reversed_id,
-    p.debit_refund,
-    p.category,
-    p.club_credit_flag,
-    p._peerdb_version,
+    p.id AS id,
+    p.user_id AS user_id,
+    p.effective_user_id AS effective_user_id,
+    p.facility_id AS facility_id,
+    p.facility_name AS facility_name,
+    p.created_at AS created_at,
+    p.captured_at AS captured_at,
+    p.payment_method AS payment_method,
+    p.gateway AS gateway,
+    p.source_enum AS source_enum,
+    p.status AS status,
+    p.reservation_paid_out AS reservation_paid_out,
+    p.discount AS discount,
+    p.tax AS tax,
+    p.tip AS tip,
+    p.card_brand AS card_brand,
+    p.currency AS currency,
+    p.paid_by_manager AS paid_by_manager,
+    p.reversed_id AS reversed_id,
+    p.debit_refund AS debit_refund,
+    p.category AS category,
+    p.club_credit_flag AS club_credit_flag,
+    p._peerdb_version AS _peerdb_version,
     CASE
         WHEN fu.role IN ('court_manager', 'court_operator', 'teacher') THEN 1
         ELSE 0
@@ -198,7 +198,7 @@ class DataManager:
         out["club_credit_flag"] = out.get("club_credit_flag", False).fillna(False)
         out["paid_by_manager"] = out.get("paid_by_manager", False).fillna(False)
         out["is_staff"] = out.get("is_staff", 0).fillna(0).astype(np.int8)
-        out["user_role"] = out.get("user_role", "player").fillna("player").astype(str)
+        out["user_role"] = out.get("user_role", "player").fillna("player").astype(str).replace("", "player")
 
         if "currency" in out.columns:
             normalizer = self._get_normalizer()
@@ -257,14 +257,93 @@ class DataManager:
         return out
 
     @staticmethod
-    def assign_proxy_labels(df: pd.DataFrame, proxy_type: str) -> pd.Series:
-        if proxy_type == "strict":
-            statuses = {"totally_refunded", "refunded_to_credit"}
-        elif proxy_type == "wide":
-            statuses = {"totally_refunded", "refunded_to_credit", "partially_refunded"}
-        else:
-            raise ValueError("Invalid proxy_type. Expected 'strict' or 'wide'.")
-        return df["status"].isin(statuses).astype(np.int8)
+    def assign_proxy_labels(
+        df: pd.DataFrame,
+        proxy_type: str,
+        settings: Optional["Settings"] = None,
+    ) -> pd.Series:
+        """Assign binary proxy labels based on type.
+
+        Parameters
+        ----------
+        df : DataFrame with raw or feature columns.
+        proxy_type : One of "strict", "wide", "tipo_a", "tipo_b", "tipo_c",
+            "tipo_d", "tipo_e", "unified".
+        settings : Optional Settings for threshold values. Uses defaults if None.
+
+        Returns
+        -------
+        pd.Series of int8 (0/1).
+        """
+        if settings is None:
+            from config.config import settings as _default_settings
+            settings = _default_settings
+
+        if proxy_type in ("strict", "tipo_a"):
+            statuses = set(settings.tipo_a_list)
+            return df["status"].isin(statuses).astype(np.int8)
+
+        if proxy_type == "wide":
+            statuses = set(settings.wide_proxy_list)
+            return df["status"].isin(statuses).astype(np.int8)
+
+        if proxy_type == "tipo_b":
+            # Circuito de credito: circuit_closure_ratio_30d > threshold AND
+            # cash_loaded_30d > threshold. Requires pre-computed rolling columns.
+            # If columns absent, returns all zeros (documented: requires aggregates).
+            if "circuit_closure_ratio_30d" not in df.columns:
+                logger.warning(
+                    "Tipo B: column 'circuit_closure_ratio_30d' not found; "
+                    "returning all zeros. Tipo B requires pre-computed aggregates."
+                )
+                return pd.Series(np.int8(0), index=df.index)
+            return (
+                (df["circuit_closure_ratio_30d"] > settings.tipo_b_circuit_closure_threshold)
+                & (df["cash_loaded_30d"] > settings.tipo_b_cash_loaded_threshold)
+            ).astype(np.int8)
+
+        if proxy_type == "tipo_c":
+            # Descuento anomalo: user_discount_ratio_30d > threshold.
+            col = "user_discount_ratio_30d"
+            if col not in df.columns:
+                logger.warning(
+                    f"Tipo C: column '{col}' not found; returning all zeros."
+                )
+                return pd.Series(np.int8(0), index=df.index)
+            return (df[col] > settings.tipo_c_discount_ratio_threshold).astype(np.int8)
+
+        if proxy_type == "tipo_d":
+            # Velocidad extrema: txn_count_1d > threshold.
+            # Uses user_txn_count_24h (shifted -1 for anti-leakage) + 1 to recover actual.
+            col = "user_txn_count_24h"
+            if col not in df.columns:
+                logger.warning(
+                    f"Tipo D: column '{col}' not found; returning all zeros."
+                )
+                return pd.Series(np.int8(0), index=df.index)
+            # Feature stores count-1 (anti-leakage shift), so actual = value + 1
+            return ((df[col] + 1) > settings.tipo_d_txn_count_1d_threshold).astype(np.int8)
+
+        if proxy_type == "tipo_e":
+            # Gratuitas sistematicas. Since payment_method='free' is excluded from
+            # the depurated universe, this type will always be 0. Documented as
+            # "tipo sin incidencia" in the thesis.
+            logger.info(
+                "Tipo E: payment_method='free' excluded from universe; "
+                "returning all zeros (documented limitation)."
+            )
+            return pd.Series(np.int8(0), index=df.index)
+
+        if proxy_type == "unified":
+            tipo_a = DataManager.assign_proxy_labels(df, "tipo_a", settings)
+            tipo_b = DataManager.assign_proxy_labels(df, "tipo_b", settings)
+            tipo_c = DataManager.assign_proxy_labels(df, "tipo_c", settings)
+            tipo_d = DataManager.assign_proxy_labels(df, "tipo_d", settings)
+            tipo_e = DataManager.assign_proxy_labels(df, "tipo_e", settings)
+            return (tipo_a | tipo_b | tipo_c | tipo_d | tipo_e).astype(np.int8)
+
+        valid = "strict, wide, tipo_a, tipo_b, tipo_c, tipo_d, tipo_e, unified"
+        raise ValueError(f"Invalid proxy_type '{proxy_type}'. Expected one of: {valid}")
 
     def _save_manifest(
         self,
@@ -274,6 +353,13 @@ class DataManager:
         df: pd.DataFrame,
         path: Path,
     ) -> None:
+        proxy_rates = {}
+        s = getattr(self, "_settings", None)
+        for ptype in ("tipo_a", "tipo_b", "tipo_c", "tipo_d", "tipo_e", "unified", "wide"):
+            labels = self.assign_proxy_labels(df, ptype, s)
+            proxy_rates[f"proxy_{ptype}_n"] = int(labels.sum())
+            proxy_rates[f"proxy_{ptype}_rate"] = round(float(labels.mean()), 6)
+
         manifest = {
             "name": split_name,
             "start_date": start,
@@ -283,8 +369,9 @@ class DataManager:
             "columns": list(df.columns),
             "status_distribution": df["status"].value_counts().to_dict(),
             "memory_mb": round(df.memory_usage(deep=True).sum() / 1e6, 1),
-            "proxy_strict_rate": float(self.assign_proxy_labels(df, "strict").mean()),
-            "proxy_wide_rate": float(self.assign_proxy_labels(df, "wide").mean()),
+            "proxy_strict_rate": proxy_rates["proxy_tipo_a_rate"],
+            "proxy_wide_rate": proxy_rates["proxy_wide_rate"],
+            **proxy_rates,
         }
         path.write_text(json.dumps(manifest, indent=2, default=str))
 

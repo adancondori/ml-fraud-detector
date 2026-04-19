@@ -1,6 +1,8 @@
 # Fase 6: Evaluacion y Prueba de Hipotesis
 
 > Responde OE3 y OE4. Cierra formalmente HE1-HE4 con evidencia estadistica, bootstrap CI 95% y estabilidad temporal.
+>
+> **Proxy de evaluacion principal:** proxy unificado (OR de 5 tipos: A, B, C, D, E). El Tipo A individual y el proxy amplio se evaluan como analisis de sensibilidad en Fase 7.
 
 ## Archivo principal
 
@@ -66,6 +68,7 @@ Mann-Whitney U unilateral.
 ```python
 from scipy.stats import mannwhitneyu
 
+# proxy = proxy_unificado (OR de 5 tipos, evaluacion principal)
 scores_proxy1 = scores[proxy == 1]
 scores_proxy0 = scores[proxy == 0]
 U, p = mannwhitneyu(scores_proxy1, scores_proxy0, alternative='greater')
@@ -127,10 +130,10 @@ ap  = average_precision_score(proxy, scores)
 ### Criterio de aceptacion HE2
 
 ```
-AUC-ROC > 0.70 AND AP > 6.33% (tasa base del proxy estricto)
+AUC-ROC > 0.70 AND AP > tasa base del proxy unificado
 ```
 
-Ambas condiciones deben cumplirse simultaneamente.
+Ambas condiciones deben cumplirse simultaneamente. La tasa base es la proporcion de `proxy_unificado == 1` en el test set (>= 6.33% por inclusion de Tipos B-E).
 
 ### Interpretacion de AUC
 
@@ -231,7 +234,7 @@ Toda comparacion debe usar exactamente:
 
 - **Mismo snapshot** de datos
 - **Mismo test set** temporal (Sep-Dic 2025)
-- **Mismo proxy** (estricto)
+- **Mismo proxy** (unificado, OR de 5 tipos)
 - **Mismas 31 features** (todos los modelos usan el mismo conjunto completo)
 - **Misma politica de nulos** y preprocesamiento
 - **Misma orientacion de scores** (alto = mas anomalo)
@@ -471,9 +474,15 @@ Se ejecuta una vez por modelo (IF, LOF, OC-SVM). Luego `compare_models` recibe l
 
 ```json
 {
+  "proxy_used": "unified",
+  "proxy_unified_base_rate": "...",
+  "proxy_unified_count": "...",
+  "proxy_type_counts": {
+    "tipo_a": "...", "tipo_b": "...", "tipo_c": "...", "tipo_d": "...", "tipo_e": "..."
+  },
   "isolation_forest": {
     "he1": {"U_statistic": ..., "p_value": ..., "rank_biserial_r": ..., "cles": ..., "he1_pass": ...},
-    "he2": {"auc_roc": ..., "average_precision": ..., "he2_pass": ...},
+    "he2": {"auc_roc": ..., "average_precision": ..., "base_rate": ..., "he2_pass": ...},
     "he3": {"ef_at_5pct": ..., "he3_pass": ...},
     "ks": {"ks_statistic": ..., "p_value": ...},
     "bootstrap_ci_auc": {"mean": ..., "lower": ..., "upper": ...},

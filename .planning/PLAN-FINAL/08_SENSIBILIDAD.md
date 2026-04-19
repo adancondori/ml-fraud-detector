@@ -4,42 +4,89 @@
 
 ---
 
-## Sensibilidad del Proxy
+## Sensibilidad del Proxy: Unificado vs Tipo A
 
 ### Proposito
 
-Demostrar que los resultados son consistentes independientemente de la definicion operacional del proxy de anomalia.
+Demostrar que los resultados son consistentes independientemente de la definicion operacional del proxy de anomalia. La evaluacion principal (Fase 6) usa el proxy unificado (OR de 5 tipos). Esta seccion verifica robustez comparando contra el Tipo A individual (solo reembolsos).
 
-### Proxies
+### Proxies evaluados
 
-| Proxy | Definicion | Tasa base |
-|-------|-----------|-----------|
-| Estricto | `status IN ('totally_refunded', 'refunded_to_credit')` | ~6.33% |
-| Amplio | `status IN ('totally_refunded', 'refunded_to_credit', 'partially_refunded')` | ~7.55% |
+| Proxy | Definicion | Tasa base | Rol |
+|-------|-----------|-----------|-----|
+| **Unificado** (5 tipos) | `max(tipo_A, tipo_B, tipo_C, tipo_D, tipo_E)` | [Por cuantificar] | **Evaluacion principal** (Fase 6) |
+| **Tipo A** (reembolsos) | `status IN ('totally_refunded', 'refunded_to_credit')` | ~6.33% | Sensibilidad y comparabilidad con literatura |
+| **Amplio** | `status IN ('totally_refunded', 'refunded_to_credit', 'partially_refunded')` | ~7.55% | Sensibilidad adicional |
 
 ### Procedimiento
 
 1. Tomar los scores ya generados en Fase 6 (no reentrenar).
-2. Evaluar `full_evaluation()` con proxy estricto (resultado principal, ya disponible).
-3. Evaluar `full_evaluation()` con proxy amplio.
-4. Calcular deltas:
+2. Resultados principales contra proxy unificado ya disponibles de Fase 6.
+3. Evaluar `full_evaluation()` con Tipo A individual.
+4. Evaluar `full_evaluation()` con proxy amplio.
+5. Calcular deltas:
 
 ```
-delta_auc = |AUC_estricto - AUC_amplio|
-delta_ap  = |AP_estricto  - AP_amplio|
+delta_auc_tipo_a  = |AUC_unificado - AUC_tipo_a|
+delta_ap_tipo_a   = |AP_unificado  - AP_tipo_a|
+delta_auc_amplio  = |AUC_unificado - AUC_amplio|
 ```
 
 ### Criterio
 
 ```
-delta_auc < 0.05
+delta_auc_tipo_a < 0.05
 ```
 
-Si se cumple, el resultado principal es robusto frente a la definicion del proxy.
+Si se cumple, el resultado principal es robusto frente a la restriccion del proxy a solo reembolsos.
 
 ### Reporte
 
-Ambos resultados se reportan en la tesis para transparencia metodologica, independientemente de si el criterio se cumple o no.
+Todos los resultados se reportan en la tesis para transparencia metodologica, independientemente de si el criterio se cumple o no. La Tabla 3.16 presenta la comparacion.
+
+---
+
+## Metricas Desagregadas por Tipo de Proxy
+
+### Proposito
+
+Evaluar la capacidad discriminativa del modelo de forma independiente para cada tipo de condicion proxy, identificando contra cuales manifestaciones de anomalia el modelo es mas o menos efectivo.
+
+### Procedimiento
+
+Para cada tipo de proxy (A, B, C, D, E), generar un proxy binario individual y calcular metricas:
+
+```python
+proxy_types = {
+    "tipo_a": ProxyLabeler.assign(df_test, "strict"),
+    "tipo_b": ProxyLabeler.assign(df_test, "tipo_b"),
+    "tipo_c": ProxyLabeler.assign(df_test, "tipo_c"),
+    "tipo_d": ProxyLabeler.assign(df_test, "tipo_d"),
+    "tipo_e": ProxyLabeler.assign(df_test, "tipo_e"),
+}
+
+for tipo_name, proxy_labels in proxy_types.items():
+    if proxy_labels.sum() >= 10:
+        auc = roc_auc_score(proxy_labels, scores)
+        ap = average_precision_score(proxy_labels, scores)
+        ef = enrichment_factor(proxy_labels, scores, k_pct=0.05)
+```
+
+### Retorno esperado
+
+```python
+{
+    "tipo_a": {"auc_roc": float, "ap": float, "ef_at_5pct": float, "count": int, "rate": float},
+    "tipo_b": {"auc_roc": float, "ap": float, "ef_at_5pct": float, "count": int, "rate": float},
+    "tipo_c": {"auc_roc": float, "ap": float, "ef_at_5pct": float, "count": int, "rate": float},
+    "tipo_d": {"auc_roc": float, "ap": float, "ef_at_5pct": float, "count": int, "rate": float},
+    "tipo_e": {"auc_roc": float, "ap": float, "ef_at_5pct": float, "count": int, "rate": float}
+}
+```
+
+### Interpretacion
+
+Diferencias entre tipos revelan que manifestaciones de anomalia captura mejor el modelo. Si Tipo B (circuitos de credito) tiene AUC alto pero Tipo D (velocidad) tiene AUC bajo, el modelo es mas sensible a patrones de flujo financiero que a rafagas de velocidad. Esto se discute en la tesis como fortalezas y limitaciones del enfoque. La tabla 3.18 de la tesis presenta estos resultados.
 
 ---
 
@@ -53,7 +100,7 @@ Verificar que el modelo no depende excesivamente de una feature que podria ser c
 
 1. Entrenar IF con **31 features** (resultado principal, ya disponible).
 2. Entrenar IF con **30 features** (sin `user_reversal_ratio_30d`).
-3. Evaluar ambos en el test set con proxy estricto.
+3. Evaluar ambos en el test set con proxy unificado (consistente con evaluacion principal).
 4. Comparar:
 
 ```
@@ -123,7 +170,7 @@ Si la diferencia es marginal (delta AUC < 0.01), los grupos F-H no aportan capac
 
 1. Entrenar IF con **31 features** (F01-F33) — resultado principal, ya disponible de Fase 6.
 2. Entrenar IF con **21 features** (F01-F23 unicamente) — mismos hiperparametros optimos.
-3. Evaluar ambos en el **test set** con proxy estricto.
+3. Evaluar ambos en el **test set** con proxy unificado (consistente con evaluacion principal).
 4. Comparar 4 metricas:
 
 ```
@@ -381,13 +428,13 @@ Se presenta en la seccion de discusion del Capitulo 3 como evidencia de la utili
 
 ---
 
-## Evaluacion Per-Status
+## Evaluacion Per-Status (complementaria al analisis por tipo)
 
-> **Nota de diseno:** Este analisis requiere una funcion/helper `per_status_evaluation` dentro de `evaluation.metrics` o, alternativamente, un modulo `SensitivityAnalyzer` dedicado.
+> **Nota:** Este analisis complementa la desagregacion por tipo de proxy (A-E) con un desglose adicional dentro del Tipo A, separando los sub-status de reembolso.
 
 ### Proposito
 
-Determinar que tipo de reembolso captura mejor el modelo. Esto informa sobre la naturaleza de las anomalias detectadas.
+Determinar que sub-tipo de reembolso (dentro del Tipo A) captura mejor el modelo. Esto informa sobre la naturaleza de las anomalias detectadas y si hay diferencias entre reembolsos totales y parciales.
 
 ### Procedimiento
 
@@ -413,7 +460,7 @@ for status in statuses:
 
 ### Interpretacion
 
-Diferencias grandes entre tipos de reembolso pueden indicar que el modelo discrimina un patron operacional especifico (e.g., reembolsos totales vs parciales) y no anomalias en general. Esto se discute pero no invalida el estudio.
+Diferencias grandes entre sub-tipos de reembolso pueden indicar que el modelo discrimina un patron operacional especifico (e.g., reembolsos totales vs parciales). Esto se discute pero no invalida el estudio.
 
 ---
 
@@ -790,7 +837,8 @@ Tests a escribir **ANTES** de implementar los analisis de sensibilidad:
 
 | # | Test | Verifica |
 |---|------|----------|
-| 1 | `test_proxy_sensitivity_both_proxies_evaluated` | Que el resultado contiene metricas para proxy estricto y proxy amplio |
+| 1 | `test_proxy_sensitivity_all_proxies_evaluated` | Que el resultado contiene metricas para proxy unificado, Tipo A y amplio |
+| 1b | `test_per_type_metrics_all_types_evaluated` | Que se calculan metricas individuales para Tipos A-E (omitiendo tipos con < 10 positivos) |
 | 2 | `test_feature18_sensitivity_delta_computed` | Que `delta_auc` se computa como `abs(AUC_31 - AUC_30)` |
 | 3 | `test_jaccard_similarity_range_0_to_1` | Que Jaccard esta en `[0.0, 1.0]` para cualquier input |
 | 4 | `test_shap_produces_feature_importance_ranking` | Que SHAP retorna un ranking de features ordenado por `mean(abs(shap_values))` |
@@ -948,11 +996,20 @@ def test_user_risk_profile_concentration():
 ```json
 {
   "proxy_sensitivity": {
-    "strict": {"auc_roc": "...", "ap": "..."},
-    "wide": {"auc_roc": "...", "ap": "..."},
-    "delta_auc": "...",
-    "delta_ap": "...",
+    "unified": {"auc_roc": "...", "ap": "...", "base_rate": "..."},
+    "tipo_a": {"auc_roc": "...", "ap": "...", "base_rate": "..."},
+    "wide": {"auc_roc": "...", "ap": "...", "base_rate": "..."},
+    "delta_auc_tipo_a": "...",
+    "delta_ap_tipo_a": "...",
+    "delta_auc_wide": "...",
     "robust": true
+  },
+  "per_type_metrics": {
+    "tipo_a": {"auc_roc": "...", "ap": "...", "ef_at_5pct": "...", "count": "...", "rate": "..."},
+    "tipo_b": {"auc_roc": "...", "ap": "...", "ef_at_5pct": "...", "count": "...", "rate": "..."},
+    "tipo_c": {"auc_roc": "...", "ap": "...", "ef_at_5pct": "...", "count": "...", "rate": "..."},
+    "tipo_d": {"auc_roc": "...", "ap": "...", "ef_at_5pct": "...", "count": "...", "rate": "..."},
+    "tipo_e": {"auc_roc": "...", "ap": "...", "ef_at_5pct": "...", "count": "...", "rate": "..."}
   },
   "feature18_sensitivity": {
     "auc_31_features": "...",

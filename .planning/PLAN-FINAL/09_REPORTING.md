@@ -137,23 +137,25 @@ Critico para feature names con underscores (e.g., `txn_amount_log` → `txn\_amo
 | `table_he3_results(results)` | 3.13 | Enrichment Factor a multiples k (1%, 2%, 5%, 10%) | `dict` por modelo |
 | `table_he4_comparison(results)` | 3.14 | Matriz IF vs competidores (4 metricas, ganador marcado) | `dict` de comparacion |
 | `table_bootstrap_ci(results)` | 3.15 | Bootstrap CIs (mean, lower, upper) por modelo y metrica | `dict` por modelo |
-| `table_sensitivity_proxy(results)` | 3.16 | Proxy estricto vs amplio (AUC, AP, delta) | `dict` de sensibilidad |
-| `table_sensitivity_feature18(results)` | 3.17 | 31 vs 30 features (AUC, delta, Jaccard, Spearman) | `dict` de sensibilidad |
-| `table_ablation_31vs21(results)` | 3.18 | Ablacion IF-31 vs IF-21: AUC-ROC, AP, P@5%, EF con deltas | `dict` de ablacion |
-| `table_temporal_stability(results)` | 3.19 | AUC mensual por modelo (Sep, Oct, Nov, Dic) | `dict` temporal |
-| `table_hypothesis_summary(results)` | 3.20 | Resumen HE1-HE4 con veredicto (respaldada/rechazada) | `dict` de resultados |
-| `table_metrics_by_role(results)` | 3.21 | AUC-ROC, AP, P@5%, EF por rol de usuario | `dict` de metricas por rol |
-| `table_metrics_by_category(results)` | 3.22 | AUC-ROC, AP, P@5%, EF por categoria de pago | `dict` de metricas por categoria |
-| `table_anomaly_types(results)` | 3.23 | Tipologia de 9 tipos de anomalia con features dominantes y descripciones | `dict` de tipologia |
-| `table_user_risk_profile(results)` | 3.24 | Perfil de riesgo agregado por usuario (metricas de riesgo) | `dict` de perfiles |
-| `table_posthoc_facility(results)` | 3.25 | Top 10 centros con mayor concentracion de anomalias | `dict` post-hoc |
-| `table_posthoc_manager(results)` | 3.26 | Top 10 actores/usuarios asociados con mayor concentracion de anomalias y descuentos; si no hay identidad validada, exporta agregado anonimo | `dict` post-hoc |
-| `table_posthoc_currency(results)` | 3.27 | Distribucion de anomalias por moneda | `dict` post-hoc |
-| `table_posthoc_discount_pattern(results)` | 3.28 | Top pares centro-actor con patron de descuento anomalo; degradado a centro si no hay identidad validada | `dict` post-hoc |
+| `table_sensitivity_proxy(results)` | 3.16 | Proxy unificado vs Tipo A vs amplio (AUC, AP, delta) | `dict` de sensibilidad |
+| `table_sensitivity_per_type(results)` | 3.17 | Metricas desagregadas por tipo de proxy (A, B, C, D, E): AUC, AP, EF, count | `dict` de sensibilidad per-type |
+| `table_sensitivity_feature18(results)` | 3.18 | 31 vs 30 features (AUC, delta, Jaccard, Spearman) | `dict` de sensibilidad |
+| `table_ablation_31vs21(results)` | 3.19 | Ablacion IF-31 vs IF-21: AUC-ROC, AP, P@5%, EF con deltas | `dict` de ablacion |
+| `table_temporal_stability(results)` | 3.20 | AUC mensual por modelo (Sep, Oct, Nov, Dic) | `dict` temporal |
+| `table_hypothesis_summary(results)` | 3.21 | Resumen HE1-HE4 con veredicto (respaldada/rechazada) | `dict` de resultados |
+| `table_metrics_by_role(results)` | 3.22 | AUC-ROC, AP, P@5%, EF por rol de usuario | `dict` de metricas por rol |
+| `table_metrics_by_category(results)` | 3.23 | AUC-ROC, AP, P@5%, EF por categoria de pago | `dict` de metricas por categoria |
+| `table_anomaly_types(results)` | 3.24 | Tipologia de 9 tipos de anomalia con features dominantes y descripciones | `dict` de tipologia |
+| `table_user_risk_profile(results)` | 3.25 | Perfil de riesgo agregado por usuario (metricas de riesgo) | `dict` de perfiles |
+| `table_posthoc_facility(results)` | 3.26 | Top 10 centros con mayor concentracion de anomalias | `dict` post-hoc |
+| `table_posthoc_manager(results)` | 3.27 | Top 10 actores/usuarios asociados con mayor concentracion de anomalias y descuentos; si no hay identidad validada, exporta agregado anonimo | `dict` post-hoc |
+| `table_posthoc_currency(results)` | 3.28 | Distribucion de anomalias por moneda | `dict` post-hoc |
+| `table_posthoc_discount_pattern(results)` | 3.29 | Top pares centro-actor con patron de descuento anomalo; degradado a centro si no hay identidad validada | `dict` post-hoc |
+| `table_hypothesis_validation_summary(results)` | 4.1 | Resumen final de validacion de hipotesis para Cap 4 (Conclusiones) | `dict` de resultados |
 
 ### Tablas que requieren datos fuera de `results.json`
 
-Las tablas 3.5, 3.6, 3.7, 3.23 y 3.24 no se derivan de `results.json`. El orquestador debe:
+Las tablas 3.5, 3.6, 3.7, 3.17 (per-type), 3.24 y 3.25 no se derivan de `results.json`. El orquestador debe:
 
 1. **Tabla 3.5:** Computar `split_info` (filas, proxy rate, date range) desde los parquets de features.
 2. **Tabla 3.6:** Usar `FEATURE_NAMES` y descripciones estaticas definidas en `engineering.py`.
@@ -164,7 +166,7 @@ Las tablas 3.5, 3.6, 3.7, 3.23 y 3.24 no se derivan de `results.json`. El orques
 split_info = {}
 for name in ["train", "val", "test"]:
     df = pd.read_parquet(settings.processed_dir / f"{name}_features.parquet")
-    proxy = DataManager.assign_proxy_labels(df, proxy_type)
+    proxy = DataManager.assign_proxy_labels(df, "unified")
     split_info[name] = {
         "rows": len(df),
         "proxy_rate": float(proxy.mean()),

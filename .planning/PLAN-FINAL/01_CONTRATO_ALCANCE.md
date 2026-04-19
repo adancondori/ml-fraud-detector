@@ -74,25 +74,55 @@ ORDER BY p.created_at, p.id
 
 El estudio es **no supervisado**: los modelos entrenan sin etiquetas. El proxy se usa **exclusivamente para evaluacion** (nunca para entrenamiento).
 
-### Proxy estricto (principal)
+### Taxonomia de cinco tipos de condicion proxy
+
+Cada tipo se define por una regla operacional **externa a las 33 features del modelo**, preservando la no-circularidad metodologica.
+
+| Tipo | Nombre | Regla Operacional | Fuente | N estimado |
+|------|--------|-------------------|--------|------------|
+| **A** | Reembolso | `status IN ('totally_refunded', 'refunded_to_credit')` | Campo BD `status` | ~429,418 (6.33%) |
+| **B** | Circuito de credito | `circuit_closure_ratio_30d > 0.80 AND cash_loaded_30d > 500 USD` | Regla auditoria operacional | [Por cuantificar] |
+| **C** | Descuento anomalo | `discount_ratio_30d > 1.00` (descuentos superan pagos en 30d) | Regla financiera | [Por cuantificar] |
+| **D** | Velocidad extrema | `txn_count_1d > 100` | Regla de negocio | [Por cuantificar] |
+| **E** | Gratuitas sistematicas | `free_pct_30d > 0.25 AND free_count_30d > 10` | Regla playbook operacional | [Por cuantificar] |
+
+**Nota sobre Tipo E:** Dado que `payment_method='free'` se excluye del universo depurado, el Tipo E se calcula sobre el dataset **bruto** antes de la exclusion, o se evalua con la poblacion completa y se marca en el dataset depurado como flag heredada. Si la regla produce cero positivos en el universo depurado, se documenta como tipo sin incidencia y se reporta transparentemente.
+
+### Proxy unificado (evaluacion principal)
+
+```python
+proxy_unificado = max(tipo_A, tipo_B, tipo_C, tipo_D, tipo_E)  # OR logico
+```
+
+- N estimado: **[Por cuantificar]** (>= 6.33% por inclusion de Tipos B-E)
+- Uso: **evaluacion principal de HE1-HE4** y metrica de referencia para AP en HE2
+- Los tipos no son mutuamente excluyentes; una transaccion puede satisfacer multiples tipos
+
+### Tipo A individual (sensibilidad)
 
 ```
 status IN ('totally_refunded', 'refunded_to_credit')
 ```
 
 - N estimado: **~429,418** (6.33% del universo)
-- Uso: evaluacion principal de HE1-HE4
+- Uso: **analisis de sensibilidad** — comparar con proxy unificado para verificar robustez y preservar comparabilidad con estudios que usen exclusivamente reembolsos como proxy
 
-### Proxy amplio (sensibilidad)
+### Proxy amplio (sensibilidad adicional)
 
 ```
 status IN ('totally_refunded', 'refunded_to_credit', 'partially_refunded')
 ```
 
 - N estimado: **~512,582** (7.55% del universo)
-- Uso: analisis de sensibilidad (verificar que conclusiones no dependen de la definicion del proxy)
+- Uso: analisis de sensibilidad adicional (verificar que conclusiones no dependen de incluir reembolsos parciales)
 
-> **Proxy != fraude.** Nunca afirmar que las anomalias detectadas equivalen a fraude. El proxy es una aproximacion basada en el estado transaccional. Usar lenguaje de asociacion, no causal.
+### Condicion de no-circularidad
+
+Cada tipo se define por campos o reglas operacionales que **NO participan como features del modelo**:
+- Tipo A usa `status` (no es feature)
+- Tipos B-E usan umbrales de reglas de auditoria/negocio documentadas en playbooks operacionales de TechSport, no umbrales estadisticos del dataset
+
+> **Proxy != fraude.** Nunca afirmar que las anomalias detectadas equivalen a fraude. El proxy es una aproximacion basada en condiciones operacionales observables. Usar lenguaje de asociacion, no causal.
 
 ---
 
@@ -338,9 +368,9 @@ Metricas complementarias: CLES (Common Language Effect Size), KS statistic.
 | Metrica | Umbral |
 |---------|--------|
 | AUC-ROC | > 0.70 |
-| Average Precision (AP) | > 6.33% (tasa base del proxy estricto) |
+| Average Precision (AP) | > tasa base del proxy unificado |
 
-**HE2 pasa si:** AUC > 0.70 **Y** AP > tasa base proxy estricto.
+**HE2 pasa si:** AUC > 0.70 **Y** AP > tasa base proxy unificado. La tasa base se calcula como la proporcion de `proxy_unificado == 1` en el test set.
 
 Bootstrap CI 95% (N=1000) para ambas metricas.
 
@@ -373,7 +403,7 @@ EF = (proporcion de proxy+ en top-k%) / (proporcion global de proxy+).
 
 > **Nota:** La tesis tabla `tab:resumen-hipotesis` indica "≥ 2/4" pero la tabla `tab:he4-validacion` y el cuerpo del texto usan "≥ 3/4". Este plan usa **≥ 3/4** como criterio oficial; la tabla resumen de la tesis debe corregirse.
 
-Comparacion justa: mismo snapshot, mismas filas, mismo set de 31 features (F06 y F21 eliminadas por exclusion de free), mismo proxy, misma ventana temporal, misma orientacion del score.
+Comparacion justa: mismo snapshot, mismas filas, mismo set de 31 features (F06 y F21 eliminadas por exclusion de free), mismo proxy unificado, misma ventana temporal, misma orientacion del score.
 
 ### Correcciones estadisticas
 
@@ -449,8 +479,14 @@ Cada clase del pipeline tiene un contrato de comportamiento que DEBE expresarse 
 |-------|----------------------------------|--------------------------|
 | `DataManager` | `test_extract_returns_correct_columns` | El DataFrame extraido contiene exactamente las columnas del SQL canonico (incluyendo `category`, `club_credit_flag`) |
 | `DataManager` | `test_extract_validates_row_counts` | Los conteos por split estan dentro de +-1% de los valores esperados |
-| `DataManager` | `test_proxy_labels_strict` | `assign_proxy_labels(df, "strict")` marca exactamente los status `totally_refunded` y `refunded_to_credit` |
-| `DataManager` | `test_proxy_labels_wide` | `assign_proxy_labels(df, "wide")` incluye ademas `partially_refunded` |
+| `ProxyLabeler` | `test_proxy_labels_strict` | `assign_proxy_labels(df, "strict")` marca exactamente los status `totally_refunded` y `refunded_to_credit` |
+| `ProxyLabeler` | `test_proxy_labels_wide` | `assign_proxy_labels(df, "wide")` incluye ademas `partially_refunded` |
+| `ProxyLabeler` | `test_proxy_tipo_b` | `assign_proxy_tipo_b(df)` marca txns con `circuit_closure_ratio_30d > 0.80 AND cash_loaded_30d > 500` |
+| `ProxyLabeler` | `test_proxy_tipo_c` | `assign_proxy_tipo_c(df)` marca txns con `discount_ratio_30d > 1.00` |
+| `ProxyLabeler` | `test_proxy_tipo_d` | `assign_proxy_tipo_d(df)` marca txns con `txn_count_1d > 100` |
+| `ProxyLabeler` | `test_proxy_tipo_e` | `assign_proxy_tipo_e(df)` marca txns con `free_pct_30d > 0.25 AND free_count_30d > 10` |
+| `ProxyLabeler` | `test_proxy_unificado` | `assign_proxy_unificado(df)` retorna OR logico de los 5 tipos; `sum(unificado) >= sum(tipo_a)` |
+| `ProxyLabeler` | `test_proxy_types_non_circular` | Ninguna regla de Tipos B-E usa features del modelo (validacion de independencia) |
 | `DataManager` | `test_downcast_preserves_large_ids` | `id` y `reversed_id` no se truncan a int32 (valores > 2^31 sobreviven) |
 | `DataManager` | `test_manifest_contains_required_fields` | El JSON sidecar contiene: name, start_date, end_date, row_count, extracted_at, checksum_sha256 |
 | `DataManager` | `test_atomic_write_survives_interruption` | Si el proceso muere durante la escritura, no queda un Parquet corrupto en la ruta final |
@@ -522,7 +558,7 @@ Cada clase del pipeline tiene un contrato de comportamiento que DEBE expresarse 
 
 **Eliminar:** `model_type`, `test_size`, `validation_size`, `mlflow_*`, `use_gpu`, `fraud_threshold`, `high_risk_threshold`, `auto_decline_threshold`, `api_host`, `api_port`, `database_url`, `use_smote`, `smote_sampling_strategy`, `use_class_weights`, `use_temporal_split`, `temporal_split_date`, `embargo_days`, `enable_drift_detection`, todo parametro supervisado.
 
-**Agregar:** `train_start`, `train_end`, `val_end`, `test_end`, `strict_proxy_statuses`, `wide_proxy_statuses`, grids de IF/LOF/OC-SVM, `bootstrap_n`, `top_k_percents`, `shap_sample_size`, `exchange_rates` o ruta a tabla de tasas.
+**Agregar:** `train_start`, `train_end`, `val_end`, `test_end`, `strict_proxy_statuses`, `wide_proxy_statuses`, umbrales de Tipos B-E (`tipo_b_circuit_threshold`, `tipo_b_cash_threshold`, `tipo_c_discount_threshold`, `tipo_d_velocity_threshold`, `tipo_e_free_pct_threshold`, `tipo_e_free_count_threshold`), grids de IF/LOF/OC-SVM, `bootstrap_n`, `top_k_percents`, `shap_sample_size`, `exchange_rates` o ruta a tabla de tasas.
 
 ---
 

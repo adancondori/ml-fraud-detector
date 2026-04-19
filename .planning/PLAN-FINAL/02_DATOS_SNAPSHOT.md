@@ -138,6 +138,27 @@ def test_proxy_labels_wide_includes_partial():
     positive = df.loc[labels]
     assert "partially_refunded" in positive["status"].unique()
 
+def test_proxy_unificado_is_superset_of_tipo_a():
+    """Proxy unificado (OR de 5 tipos) siempre >= Tipo A."""
+    tipo_a = ProxyLabeler.assign(df, "strict")
+    unified = ProxyLabeler.assign(df, "unified")
+    assert unified.sum() >= tipo_a.sum()
+    assert (tipo_a & ~unified).sum() == 0  # Tipo A es subconjunto de unificado
+
+def test_proxy_tipos_b_through_e():
+    """Tipos B-E se calculan con reglas operacionales independientes de features."""
+    # Tipo B: circuit_closure_ratio_30d > 0.80 AND cash_loaded_30d > 500
+    tipo_b = ProxyLabeler.assign(df_with_aggregates, "tipo_b")
+    # Tipo C: discount_ratio_30d > 1.00
+    tipo_c = ProxyLabeler.assign(df_with_aggregates, "tipo_c")
+    # Tipo D: txn_count_1d > 100
+    tipo_d = ProxyLabeler.assign(df_with_aggregates, "tipo_d")
+    # Tipo E: free_pct_30d > 0.25 AND free_count_30d > 10
+    tipo_e = ProxyLabeler.assign(df_with_aggregates, "tipo_e")
+    # Todos son Series booleanas
+    for label in [tipo_b, tipo_c, tipo_d, tipo_e]:
+        assert label.dtype == bool
+
 def test_downcast_preserves_large_ids():
     """id y reversed_id no se truncan a int32 (valores > 2^31 sobreviven)."""
     df_cast = validator.downcast(df_with_large_ids)
@@ -177,7 +198,7 @@ def test_atomic_write_survives_interruption():
 |-------|----------------------|---------|
 | `ClickHouseExtractor` | Conexion a ClickHouse, ejecucion de queries, retry logic | `data/extractors.py` |
 | `DataValidator` | Validacion de duplicados, NULLs, rangos, dominios, downcast | `data/validators.py` |
-| `ProxyLabeler` | Asignacion de proxy labels (metodo estatico/utilidad) | `data/proxy.py` |
+| `ProxyLabeler` | Asignacion de proxy labels: Tipo A (estricto/amplio), Tipos B-E, proxy unificado | `data/proxy.py` |
 | `ManifestWriter` | Generacion de JSON sidecars con metadata de extraccion | `data/manifest.py` |
 | `DataManager` | **Fachada** que orquesta las clases anteriores en el flujo extract-validate-save | `data/loader.py` |
 
@@ -232,7 +253,7 @@ CONTEXT_COLS = ["currency", "paid_by_manager", "effective_user_id"]
 | `_downcast(df)` | Downcast selectivo: float64->float32 (solo SAFE_FLOAT32_COLS), int64->int32 (solo SAFE_INT32_COLS despues de verificar max < 2^31) |
 | `load_splits()` | Retorna tupla de 3 DataFrames (train, val, test) |
 | `load_split(name)` | Retorna un DataFrame con verificacion de existencia y error claro |
-| `assign_proxy_labels(df, proxy_type)` | **Metodo estatico.** Retorna Series booleana segun proxy_type ("strict" o "wide") |
+| `assign_proxy_labels(df, proxy_type)` | **Metodo estatico.** Retorna Series booleana segun proxy_type ("strict", "wide", "tipo_b", "tipo_c", "tipo_d", "tipo_e", "unified") |
 | `_save_manifest(name, start, end, df)` | Guarda JSON sidecar con metadata de extraccion |
 | `close()` | Desconecta de ClickHouse |
 

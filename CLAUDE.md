@@ -8,7 +8,8 @@ Pipeline de deteccion de **anomalias transaccionales** (no supervisado) para la 
 
 **Empresa:** TechSport Inc. (pseudonimo)
 **Datos:** 6.784.696 transacciones depuradas (gestion 2025) desde ClickHouse
-**Proxy estricto:** status IN ('totally_refunded', 'refunded_to_credit') = 6.33%
+**Proxy unificado (evaluacion principal):** OR de 5 tipos (A+B+C+D+E) = 10.23%
+**Tipo A (reembolso):** status IN ('totally_refunded', 'refunded_to_credit') = 6.33%
 
 ## Stack Tecnologico
 
@@ -56,14 +57,16 @@ make lint                 # Flake8
 make notebook
 ```
 
-## 33 Features (8 grupos)
+## 31 Features (8 grupos)
+
+F06 (is_free) y F21 (user_free_pct_30d) eliminadas porque payment_method='free' se excluye del universo.
 
 | Grupo | Features | Nums |
 |-------|----------|------|
-| A) Transaccionales | reservation_paid_out, log_amount, amount_usd_ratio, discount_ratio, has_tip, is_free | #1-6 |
+| A) Transaccionales | reservation_paid_out, log_amount, amount_usd_ratio, discount_ratio, has_tip | #1-5 |
 | B) Temporales | hour_sin, hour_cos, day_of_week, is_weekend, is_off_hours | #7-11 |
 | C) Velocidad | user_txn_count_1h/24h, time_since_last_txn, user_amount_24h | #12-15 |
-| D) Comportamiento | user_distinct_facilities_30d, user_distinct_methods, user_reversal_ratio_30d*, user_account_age_days, user_discount_ratio_30d, user_free_pct_30d | #16-21 |
+| D) Comportamiento | user_distinct_facilities_30d, user_distinct_methods, user_reversal_ratio_30d*, user_account_age_days, user_discount_ratio_30d | #16-20 |
 | E) Contextuales | facility_avg_amount, amount_facility_ratio | #22-23 |
 | F) Credito/Flujo | is_club_credit, user_debit_count_30d, user_debit_amount_30d, credit_flow_ratio | #24-27 |
 | G) Rol/Staff | is_staff, paid_by_manager, staff_amount_zscore | #28-30 |
@@ -71,7 +74,18 @@ make notebook
 
 *Feature #18 (user_reversal_ratio_30d): correlacion mecanica con proxy. Analisis de sensibilidad obligatorio (delta AUC < 0.02).
 
-Variantes: IF-33 (principal), IF-32 (sin F18), IF-23 (ablacion grupos F,G,H).
+Variantes: IF-31 (principal), IF-30 (sin F18), IF-21 (ablacion grupos F,G,H).
+
+## Proxy Taxonomy (5 tipos)
+
+| Tipo | Regla | Tasa |
+|------|-------|------|
+| A - Reembolso | status IN ('totally_refunded','refunded_to_credit') | 6.33% |
+| B - Circuito credito | circuit_closure > 80% AND cash_loaded > $500 | 0% (datos no disponibles) |
+| C - Descuento anomalo | user_discount_ratio_30d > 100% | 3.72% |
+| D - Velocidad extrema | txn_count_1d > 100 | 0.34% |
+| E - Gratuitas | free_pct_30d > 25% AND free_count > 10 | 0% (excluidas del universo) |
+| **Unificado** | **OR(A,B,C,D,E)** | **10.23%** |
 
 ## Relacion con el Proyecto Tesis-Latex
 

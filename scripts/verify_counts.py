@@ -35,6 +35,7 @@ EXPECTED = {
 EXPECTED_TOTAL = 6_784_695
 EXPECTED_PROXY_STRICT_RATE = 0.0633   # 6.33%
 EXPECTED_PROXY_WIDE_RATE   = 0.0755   # 7.55%
+EXPECTED_PROXY_UNIFIED_RATE = 0.1023  # 10.23% (OR of types A+C+D; B=0, E=0)
 TOLERANCE = 0.01  # ±1%
 
 STRICT_STATUSES = {"totally_refunded", "refunded_to_credit"}
@@ -101,6 +102,30 @@ def verify_from_parquets() -> bool:
         logger.info(f"  {'✓' if strict_ok else '✗'} proxy_strict : {proxy_strict_sum:>10,}  rate={strict_rate*100:.2f}%  (expected ~6.33%)")
         logger.info(f"  {'✓' if wide_ok   else '✗'} proxy_wide   : {proxy_wide_sum:>10,}  rate={wide_rate*100:.2f}%  (expected ~7.55%)")
         all_ok = all_ok and strict_ok and wide_ok
+
+    # Proxy unificado (requires feature parquets for tipo_c and tipo_d)
+    from fraud_detector.data.loader import DataManager
+
+    unified_sum = 0
+    feature_available = True
+    for name in ("train", "val", "test"):
+        feat_path = settings.processed_dir / f"{name}_features.parquet"
+        if not feat_path.exists():
+            logger.warning(f"  ⚠ Feature parquet not found for {name}; skipping proxy unificado check")
+            feature_available = False
+            break
+        df_feat = pd.read_parquet(feat_path, engine="pyarrow")
+        unified_sum += int(DataManager.assign_proxy_labels(df_feat, "unified").sum())
+        del df_feat
+
+    if feature_available and total_rows > 0:
+        unified_rate = unified_sum / total_rows
+        unified_ok = abs(unified_rate - EXPECTED_PROXY_UNIFIED_RATE) <= TOLERANCE
+        logger.info(
+            f"  {'✓' if unified_ok else '✗'} proxy_unified: {unified_sum:>10,}  "
+            f"rate={unified_rate*100:.2f}%  (expected ~10.23%)"
+        )
+        all_ok = all_ok and unified_ok
 
     logger.info("")
     logger.info(f"Gate A: {'PASS ✓' if all_ok else 'FAIL ✗'}")

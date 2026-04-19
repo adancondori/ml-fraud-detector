@@ -111,7 +111,7 @@ class TestGridSearchParams:
     def test_ocsvm_nu_grid(self):
         from config.config import Settings
         s = Settings()
-        assert s.ocsvm_nu_list == [0.02, 0.05, 0.10]
+        assert s.ocsvm_nu_list == [0.01, 0.05, 0.10]
 
     def test_ocsvm_gamma_grid(self):
         from config.config import Settings

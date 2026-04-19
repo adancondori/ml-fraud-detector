@@ -1,79 +1,25 @@
 # Processed Data Directory
 
-Este directorio contiene **datos procesados y transformados** listos para entrenamiento.
+Parquets generados por el pipeline de deteccion de anomalias. **No se versionan en Git.**
 
-## Propósito
+## Archivos esperados
 
-- Almacenar datos después de limpieza y preprocesamiento
-- Resultados intermedios del pipeline de datos
-- Datos particionados (train/val/test)
-- Features engineered
+| Archivo | Contenido | Generado por |
+|---------|-----------|-------------|
+| `warm_raw.parquet` | Dic 2024 — warm history | `DataManager.extract_from_clickhouse()` |
+| `train_raw.parquet` | Ene-Jun 2025 | `DataManager.extract_from_clickhouse()` |
+| `val_raw.parquet` | Jul-Ago 2025 | `DataManager.extract_from_clickhouse()` |
+| `test_raw.parquet` | Sep-Dic 2025 | `DataManager.extract_from_clickhouse()` |
+| `train_features.parquet` | 31 features + metadata | `FeatureEngineer.transform()` |
+| `val_features.parquet` | 31 features + metadata | `FeatureEngineer.transform()` |
+| `test_features.parquet` | 31 features + metadata | `FeatureEngineer.transform()` |
 
-## Tipos de archivos esperados
-
-- `train.parquet` - Conjunto de entrenamiento
-- `val.parquet` - Conjunto de validación
-- `test.parquet` - Conjunto de prueba
-- `features_*.parquet` - Features procesados
-- `*.joblib` - Preprocessors guardados
-
-## Ejemplo de estructura
-
-```
-data/processed/
-├── train.parquet
-├── val.parquet
-├── test.parquet
-├── preprocessor.joblib
-└── feature_engineering_output.parquet
-```
-
-## Gestión
-
-Estos archivos **NO se versionan en Git** porque:
-- Son reproducibles desde `data/raw/` ejecutando el código
-- Pueden ser grandes
-- Se generan automáticamente
-
-## Generación de datos procesados
-
-Los datos procesados se generan con los scripts del proyecto:
+## Reproduccion
 
 ```python
-from fraud_detector.data.loader import DataLoader, split_data
-from fraud_detector.features.preprocessor import FeaturePreprocessor
+from fraud_detector.data.loader import DataManager
+from config.config import get_settings
 
-# Cargar raw data
-loader = DataLoader()
-df = loader.load_csv("data/raw/transactions.csv")
-
-# Split
-train_df, val_df, test_df = split_data(df, target_col='is_fraud')
-
-# Guardar
-loader.save_parquet(train_df, "data/processed/train.parquet")
-loader.save_parquet(val_df, "data/processed/val.parquet")
-loader.save_parquet(test_df, "data/processed/test.parquet")
+dm = DataManager(get_settings())
+dm.extract_from_clickhouse()  # genera los 4 _raw.parquet + manifests
 ```
-
-## Configuración
-
-El path se configura en `.env`:
-```bash
-PROCESSED_DATA_PATH=data/processed/processed_data.parquet
-```
-
-## Reproducibilidad
-
-Para reproducir los datos procesados:
-
-1. Asegúrate de tener los raw data
-2. Ejecuta el notebook: `notebooks/01_exploratory_analysis.ipynb`
-3. O ejecuta el script de preprocesamiento (cuando lo crees)
-
-## Cache Strategy
-
-Considera usar cache para acelerar el desarrollo:
-- Primera ejecución: procesa desde raw
-- Siguientes ejecuciones: carga desde processed
-- Invalida cache cuando cambies el código de preprocessing

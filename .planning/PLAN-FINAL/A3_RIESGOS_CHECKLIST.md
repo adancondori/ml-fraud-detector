@@ -12,7 +12,7 @@ Estas decisiones estan **congeladas**. No se reabren salvo evidencia critica doc
 | # | Decision |
 |---|----------|
 | D1 | El universo se extrae con `FINAL` de `pbp_productionDB_optimized.payments`. |
-| D2 | El proxy principal es **estricto** (`totally_refunded`, `refunded_to_credit`); el amplio solo para analisis de sensibilidad. |
+| D2 | El proxy principal es el **unificado** (OR de 5 tipos: A reembolso, B circuito credito, C descuento anomalo, D velocidad extrema, E gratuitas sistematicas); el Tipo A individual y el amplio se usan para analisis de sensibilidad. |
 | D3 | El modelo principal es **Isolation Forest**. |
 | D4 | La comparacion obligatoria es contra **LOF** y **One-Class SVM**. |
 | D5 | El resultado principal debe contrastarse con variante **sin `user_reversal_ratio_30d`** (30 features). |

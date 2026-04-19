@@ -7,6 +7,14 @@ contract in PLAN-FINAL/01_CONTRATO_ALCANCE.md.
 Validated counts (ClickHouse FINAL, 2026-03-17):
   - N=6,784,695  train=3,137,086  val=1,130,118  test=2,517,491  warm=419,820
   - proxy_strict=429,469 (6.33%)  proxy_wide=512,644 (7.55%)
+
+Proxy taxonomy (5 types, updated 2026-04-15):
+  - Tipo A: reembolso (status-based)
+  - Tipo B: circuito de credito (circuit_closure > 80%, cash_loaded > $500)
+  - Tipo C: descuento anomalo (discount_ratio_30d > 100%)
+  - Tipo D: velocidad extrema (txn_count_1d > 100)
+  - Tipo E: gratuitas sistematicas (free_pct_30d > 25%, free_count_30d > 10)
+  - Proxy unificado: OR(A, B, C, D, E) — evaluacion principal
 """
 from __future__ import annotations
 
@@ -68,19 +76,35 @@ class Settings(BaseSettings):
     test_end: str = "2026-01-01"       # exclusive
 
     # ── Proxy Label Definitions ──────────────────────────────────
+    # Tipo A: reembolso (status-based)
     strict_proxy_statuses: str = "totally_refunded,refunded_to_credit"
     wide_proxy_statuses: str = "totally_refunded,refunded_to_credit,partially_refunded"
+
+    # Tipo B: circuito de credito (rolling 30d aggregates)
+    tipo_b_circuit_closure_threshold: float = 0.80
+    tipo_b_cash_loaded_threshold: float = 500.0
+
+    # Tipo C: descuento anomalo (rolling 30d)
+    tipo_c_discount_ratio_threshold: float = 1.00
+
+    # Tipo D: velocidad extrema (daily count)
+    tipo_d_txn_count_1d_threshold: int = 100
+
+    # Tipo E: gratuitas sistematicas (rolling 30d)
+    tipo_e_free_pct_threshold: float = 0.25
+    tipo_e_free_count_threshold: int = 10
 
     # ── Isolation Forest Grid ────────────────────────────────────
     if_n_estimators: str = "100,200,300,500"
     if_max_samples: str = "256,512,1024,2048"
     if_max_features: str = "0.5,0.75,1.0"
+    if_contamination: str = "0.01,0.03,0.05,0.06,0.08"
 
     # ── LOF Grid ─────────────────────────────────────────────────
     lof_n_neighbors: str = "20,50,100"
 
     # ── OC-SVM Grid ──────────────────────────────────────────────
-    ocsvm_nu: str = "0.02,0.05,0.10"
+    ocsvm_nu: str = "0.01,0.05,0.10"
     ocsvm_gamma: str = "scale,auto"
     ocsvm_subsample: int = 100_000
 
@@ -89,11 +113,25 @@ class Settings(BaseSettings):
     top_k_percents: str = "0.01,0.02,0.05,0.10"
     shap_sample_size: int = 5000
 
+    # ── Hypothesis Thresholds (HE1-HE4) ─────────────────────────
+    he1_alpha: float = 0.05
+    he1_min_rank_biserial: float = 0.10
+    he2_min_auc_roc: float = 0.70
+    he2_min_ap_above_base_rate: bool = True  # AP > proxy unificado base rate
+    he3_min_enrichment_factor: float = 1.0
+    he4_min_metrics_won: int = 3  # IF must win >= 3 of 4 metrics vs competitors
+
     # ── Proxy parsing properties ─────────────────────────────────
 
     @property
     def strict_proxy_list(self) -> List[str]:
+        """Tipo A statuses (backward compat alias)."""
         return [s.strip() for s in self.strict_proxy_statuses.split(",")]
+
+    @property
+    def tipo_a_list(self) -> List[str]:
+        """Tipo A: reembolso statuses."""
+        return self.strict_proxy_list
 
     @property
     def wide_proxy_list(self) -> List[str]:
@@ -112,6 +150,10 @@ class Settings(BaseSettings):
     @property
     def if_max_features_list(self) -> List[float]:
         return [float(x.strip()) for x in self.if_max_features.split(",")]
+
+    @property
+    def if_contamination_list(self) -> List[float]:
+        return [float(x.strip()) for x in self.if_contamination.split(",")]
 
     @property
     def lof_n_neighbors_list(self) -> List[int]:

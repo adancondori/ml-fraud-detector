@@ -96,9 +96,8 @@ def _rolling_shifted_stat(
         df.groupby("user_id")
         .rolling(window, on="created_at")[value_col]
         .agg(agg)
-        .droplevel(0)
-        .reindex(df.index)
     )
+    raw = pd.Series(raw.droplevel(0).values, index=df.index)
     return _series_group_shift(raw.astype(np.float64), df["user_id"]).astype(np.float32)
 
 
@@ -174,10 +173,9 @@ class VelocityFeatures(FeatureGroup):
             df.groupby("user_id")
             .rolling(window, on="created_at")["id"]
             .count()
-            .droplevel(0)
-            .reindex(df.index)
         )
-        return (raw - 1).fillna(0).astype(np.float32)
+        values = raw.droplevel(0).values
+        return pd.Series(values - 1, index=df.index).fillna(0).astype(np.float32)
 
     @staticmethod
     def _rolling_amount_sum(df: pd.DataFrame, window: str) -> pd.Series:
@@ -185,10 +183,9 @@ class VelocityFeatures(FeatureGroup):
             df.groupby("user_id")
             .rolling(window, on="created_at")["amount"]
             .sum()
-            .droplevel(0)
-            .reindex(df.index)
         )
-        return (raw - df["amount"]).fillna(0).clip(lower=0).astype(np.float32)
+        values = raw.droplevel(0).values
+        return pd.Series(values - df["amount"].values, index=df.index).fillna(0).clip(lower=0).astype(np.float32)
 
     @staticmethod
     def _time_since_last(df: pd.DataFrame) -> pd.Series:

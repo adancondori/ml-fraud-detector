@@ -11,8 +11,8 @@ Completar la implementacion empirica de la tesis de deteccion de anomalias trans
 1. Snapshot de datos 2025 deduplicado y congelado con warm history.
 2. Pipeline reproducible de extraccion a reporting (`run_pipeline.py`).
 3. Tablas LaTeX y figuras PDF/PNG para Capitulo 2 y Capitulo 3.
-4. Hipotesis HE1-HE4 contestadas con evidencia y bootstrap CI 95%.
-5. Analisis de sensibilidad (proxy estricto/amplio, Feature #18, estabilidad temporal, ablacion IF-31 vs IF-21, metricas por segmento, tipologia SHAP, perfil usuario).
+4. Hipotesis HE1-HE4 contestadas contra proxy unificado (OR de 5 tipos) con evidencia y bootstrap CI 95%.
+5. Analisis de sensibilidad (proxy unificado vs Tipo A individual, metricas desagregadas por tipo B-E, proxy amplio, Feature #18, estabilidad temporal, ablacion IF-31 vs IF-21, metricas por segmento, tipologia SHAP, perfil usuario).
 6. Analisis post-hoc de anomalias por centro, actor operativo y moneda (concentracion de descuentos).
 7. Repositorio limpio, probado y defendible.
 
@@ -223,6 +223,11 @@ No cerrar Cap 2/3 con tablas manuales; todo artefacto debe salir del pipeline. T
 | 30 | Tipologia de anomalias derivada de SHAP (9 tipos) | CLAUDE |
 | 31 | Perfil de riesgo agregado por usuario | CLAUDE |
 | 32 | Grid search IF incluye contamination (240 combos) | CLAUDE |
+| 33 | Proxy unificado (OR 5 tipos A-E) como evaluacion principal; Tipo A individual como sensibilidad | REVISION |
+| 34 | ProxyLabeler calcula Tipos B-E con reglas operacionales documentadas | REVISION |
+| 35 | Metricas desagregadas por tipo de proxy (A, B, C, D, E) en sensibilidad | REVISION |
+| 36 | HE2 criterio AP usa tasa base del proxy unificado (no fija 6.33%) | REVISION |
+| 37 | Tabla 3.17 per-type y Tabla 4.1 resumen hipotesis agregadas al reporting | REVISION |
 
 ## Estimaciones
 

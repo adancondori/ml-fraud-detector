@@ -1,7 +1,27 @@
-# CHANGELOG HISTORICO — Plan v2.0 (2026-03-22)
+# CHANGELOG HISTORICO — Plan v2.0 (2026-03-22) + v2.1 (2026-04-15)
 
 > Resumen de correcciones aplicadas al PLAN-FINAL para alinearlo con la tesis actualizada (`03_propuesta_validacion.tex`).
 > Documento historico: **no usar como fuente operativa de implementacion**. Si hay discrepancias con la version actual, prevalece `01_CONTRATO_ALCANCE.md` y las variantes canonicas `IF-31 / IF-30 / IF-21`.
+
+## v2.1 — Proxy Unificado (2026-04-15)
+
+### CRITICA
+
+| # | Discrepancia | Correccion |
+|---|-------------|------------|
+| C1 | **Proxy de evaluacion principal: estricto (Tipo A) en plan vs unificado (5 tipos) en tesis** — La tesis define proxy_unificado = OR(A,B,C,D,E) como evaluacion principal y Tipo A como sensibilidad. El plan usaba proxy estricto (solo Tipo A) como principal y amplio (Tipo A + partially_refunded) como sensibilidad. | Corregido en `01_CONTRATO_ALCANCE.md`, `07_EVALUACION_HIPOTESIS.md`, `08_SENSIBILIDAD.md`, `09_REPORTING.md`, `A3_RIESGOS_CHECKLIST.md`, `00_PLAN_MAESTRO.md`. Ahora: proxy unificado = evaluacion principal; Tipo A individual = sensibilidad; amplio = sensibilidad adicional. |
+
+### IMPORTANTES
+
+| # | Discrepancia | Correccion |
+|---|-------------|------------|
+| I1 | **Tipos B-E no implementados como labels** — ProxyLabeler solo manejaba estricto/amplio. | Agregados 5 tipos con reglas operacionales en ProxyLabeler, tests TDD y config. |
+| I2 | **Metricas desagregadas por tipo ausentes** — Plan solo tenia per-status (por valor de status). | Agregada seccion "Metricas Desagregadas por Tipo de Proxy" en `08_SENSIBILIDAD.md` con evaluacion A-E individual. |
+| I3 | **HE2 criterio AP: tasa base estricto vs unificado** — Plan usaba 6.33% fijo. | Corregido a "AP > tasa base proxy unificado" (dinamica, calculada en test set). |
+| I4 | **Tabla per-type ausente en reporting** — No existia tabla para metricas por tipo B-E. | Agregada tabla 3.17 `table_sensitivity_per_type` y renumeradas tablas 3.18-3.29. Agregada tabla 4.1 para conclusiones. |
+| I5 | **Condiciones equidad HE4: usaba proxy estricto** | Corregido a proxy unificado para consistencia. |
+
+---
 
 ## Discrepancias Detectadas y Corregidas
 

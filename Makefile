@@ -1,4 +1,4 @@
-.PHONY: install install-dev setup clean test lint format type-check pre-commit notebook mlflow git-check git-status verify help
+.PHONY: install install-dev setup clean test lint format type-check pre-commit notebook help
 
 help:
 	@echo "Available commands:"
@@ -10,8 +10,6 @@ help:
 	@echo ""
 	@echo "Development:"
 	@echo "  make notebook       - Start Jupyter notebook"
-	@echo "  make mlflow         - Start MLflow UI"
-	@echo "  make verify         - Verify project setup"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make test           - Run tests with coverage"
@@ -19,10 +17,6 @@ help:
 	@echo "  make format         - Format code (black + isort)"
 	@echo "  make type-check     - Run type checking (mypy)"
 	@echo "  make pre-commit     - Run pre-commit on all files"
-	@echo ""
-	@echo "Git & Version Control:"
-	@echo "  make git-check      - Check files before commit"
-	@echo "  make git-status     - Show Git status with warnings"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean          - Clean temporary files"
@@ -78,19 +72,3 @@ pre-commit:
 notebook:
 	jupyter notebook notebooks/
 
-mlflow:
-	mlflow ui --port 5000
-
-git-check:
-	@echo "🔍 Verificando archivos antes de commit..."
-	@python3 check_git_status.py
-
-git-status:
-	@echo "📋 Git Status:"
-	@git status
-	@echo ""
-	@python3 check_git_status.py
-
-verify:
-	@echo "✅ Verificando configuración del proyecto..."
-	@python3 verify_setup.py

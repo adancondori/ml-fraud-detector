@@ -82,7 +82,3 @@ class UnsupervisedPreprocessor:
         if not np.isfinite(values).all():
             raise ValueError("Preprocessor input contains NaN or infinite values")
         return values
-
-
-# Backward-compatible alias for older imports.
-FeaturePreprocessor = UnsupervisedPreprocessor
