@@ -1,0 +1,7 @@
+# Pinned dependencies for ml-scorer container (Python 3.12)
+# Must match training environment exactly for pickle compatibility
+scikit-learn==1.6.1
+joblib>=1.4.0
+numpy>=1.24.0,<2.0.0
+pandas>=2.0.0
+loguru>=0.7.0
