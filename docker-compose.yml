@@ -1,0 +1,68 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse
+    ports:
+      - '8123:8123'
+      - '9000:9000'
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pbc-network
+
+  ml-scorer:
+    image: python:3.12-slim
+    container_name: ml-scorer
+    working_dir: /app
+    volumes:
+      - .:/app:delegated
+    environment:
+      MODEL_DIR: /app/output/models
+      PYTHONPATH: /app/src
+    command:
+      - bash
+      - -c
+      - |
+        pip install --no-cache-dir scikit-learn==1.6.1 joblib numpy pandas loguru &&
+        pip install --no-cache-dir -e /app &&
+        python -c "
+        from fraud_detector.scoring.scorer import SingleTransactionScorer
+        from fraud_detector.scoring.context import UserContext
+        import os
+        d = os.environ.get('MODEL_DIR', 'output/models')
+        scorer = SingleTransactionScorer(
+            model_path=f'{d}/isolation_forest.joblib',
+            scaler_path=f'{d}/scaler.joblib',
+            feature_engineer_path=f'{d}/feature_engineer.joblib',
+            thresholds_path=f'{d}/thresholds.json',
+            ch_connector=None)
+        payment = dict(user_id=1, facility_id=1, reservation_paid_out=100.0,
+                       discount=0, tip=0, payment_method='card', category='reservation',
+                       club_credit_flag=False, paid_by_manager=False, currency='USD',
+                       created_at='2025-10-15T14:30:00')
+        result = scorer.score(payment, context=UserContext())
+        print(f'Models loaded OK: score={result.score:.6f}, risk={result.risk_level}')
+        " &&
+        echo 'ml-scorer stub ready' &&
+        tail -f /dev/null
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    ports:
+      - '8765:8000'
+    networks:
+      - pbc-network
+
+volumes:
+  clickhouse_data:
+    driver: local
+
+networks:
+  pbc-network:
+    external: true
