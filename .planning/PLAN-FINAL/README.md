@@ -16,6 +16,7 @@ Indice de navegacion del plan final ejecutable.
 - `09_REPORTING.md`
 - `10_ORQUESTADOR.md`
 - `11_TESTS_CLEANUP_INTEGRACION.md`
+- `12_SINGLE_TRANSACTION_SCORER.md` — Scorer individual: transaccion → score + anomalo si/no (post-tesis, Gate F)
 
 ## Anexos transversales
 

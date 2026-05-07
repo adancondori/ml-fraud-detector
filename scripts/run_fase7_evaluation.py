@@ -1,0 +1,238 @@
+#!/usr/bin/env python
+"""Fase 7: Evaluación e Hipótesis — HE1-HE4 on test set.
+
+Loads trained models from Fase 6, scores the test set, evaluates
+HE1-HE4 with proxy unificado, bootstrap CI 95%, temporal stability,
+Holm-Bonferroni correction, and model comparison.
+
+Outputs:
+    output/scores/test_scores.parquet  (id + created_at + 3 model scores)
+    output/results.json                (HE1-HE4, bootstrap, temporal, comparison)
+    output/models/thresholds.json      (calibrated threshold for Fase 12 scorer)
+"""
+from __future__ import annotations
+
+import json
+import sys
+import time
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from config.config import settings
+from fraud_detector.data.loader import DataManager
+from fraud_detector.evaluation.hypothesis import (
+    apply_holm_bonferroni,
+    compare_models,
+    full_evaluation,
+    temporal_stability,
+)
+from fraud_detector.features.engineering import FEATURE_NAMES, FEATURE_NAMES_21, FEATURE_NAMES_30
+from fraud_detector.utils.logger import logger
+
+
+def load_test_data():
+    """Load test arrays, features parquet (for metadata), and proxy labels."""
+    X_test = np.load(settings.scores_dir / "X_test.npy")
+    df_test = pd.read_parquet(settings.processed_dir / "test_features.parquet")
+
+    # Proxy unificado (OR of 5 types) — primary evaluation
+    y_proxy = DataManager.assign_proxy_labels(df_test, "unified", settings).values
+
+    # Metadata for test_scores.parquet
+    meta = df_test[["id", "created_at"]].copy()
+
+    logger.info(
+        f"Test set: {X_test.shape[0]:,} rows, "
+        f"proxy_unified={y_proxy.sum():,} ({y_proxy.mean() * 100:.2f}%)"
+    )
+    return X_test, y_proxy, meta, df_test
+
+
+def score_all_models(X_test, df_test):
+    """Load all 5 models and generate scores on test set.
+
+    Returns dict of {model_name: scores_array}.
+    Uses -decision_function for all models (canonical scoring).
+    """
+    models_dir = settings.models_output_dir
+    scores = {}
+
+    # Feature subset indices for variants
+    idx_30 = [FEATURE_NAMES.index(f) for f in FEATURE_NAMES_30]
+    idx_21 = [FEATURE_NAMES.index(f) for f in FEATURE_NAMES_21]
+
+    # IF-31 (primary)
+    logger.info("Scoring IF-31...")
+    model_if = joblib.load(models_dir / "isolation_forest.joblib")
+    scores["isolation_forest"] = (-model_if.score_samples(X_test)).astype(np.float32)
+
+    # IF-30 (sensitivity, no F18)
+    logger.info("Scoring IF-30...")
+    model_if30 = joblib.load(models_dir / "isolation_forest_30.joblib")
+    scores["isolation_forest_30"] = (-model_if30.score_samples(X_test[:, idx_30])).astype(np.float32)
+
+    # IF-21 (ablation)
+    logger.info("Scoring IF-21...")
+    model_if21 = joblib.load(models_dir / "isolation_forest_21.joblib")
+    scores["isolation_forest_21"] = (-model_if21.score_samples(X_test[:, idx_21])).astype(np.float32)
+
+    # LOF
+    logger.info("Scoring LOF...")
+    model_lof = joblib.load(models_dir / "lof.joblib")
+    scores["lof"] = (-model_lof.decision_function(X_test)).astype(np.float32)
+
+    # OC-SVM
+    logger.info("Scoring OC-SVM...")
+    model_ocsvm = joblib.load(models_dir / "ocsvm.joblib")
+    scores["ocsvm"] = (-model_ocsvm.decision_function(X_test)).astype(np.float32)
+
+    for name, s in scores.items():
+        logger.info(f"  {name}: mean={s.mean():.4f}, std={s.std():.4f}, finite={np.isfinite(s).all()}")
+
+    return scores
+
+
+def save_test_scores(meta, scores):
+    """Save test_scores.parquet with id + created_at + 3 primary model scores."""
+    df = meta.copy()
+    df["score_if"] = scores["isolation_forest"]
+    df["score_lof"] = scores["lof"]
+    df["score_ocsvm"] = scores["ocsvm"]
+
+    path = settings.scores_dir / "test_scores.parquet"
+    df.to_parquet(path, index=False)
+    logger.info(f"Saved test_scores.parquet: {len(df):,} rows → {path}")
+
+
+def save_thresholds(scores_if):
+    """Export thresholds.json for Fase 12 (SingleTransactionScorer)."""
+    threshold = float(np.percentile(scores_if, 95))
+    # Reduce percentiles to 1000 equi-spaced for compact JSON
+    sorted_scores = np.sort(scores_if)
+    step = max(1, len(sorted_scores) // 1000)
+    percentiles_sample = sorted_scores[::step].tolist()
+
+    result = {
+        "binary_threshold": threshold,
+        "threshold_source": "percentile_95_test_set",
+        "score_percentiles": percentiles_sample,
+        "calibration_date": pd.Timestamp.now().isoformat(),
+        "model": "isolation_forest",
+    }
+    path = settings.models_output_dir / "thresholds.json"
+    path.write_text(json.dumps(result, indent=2))
+    logger.info(f"Saved thresholds.json: threshold={threshold:.6f}")
+
+
+def main():
+    t0 = time.perf_counter()
+
+    # --- Load data ---
+    X_test, y_proxy, meta, df_test = load_test_data()
+
+    # --- Score all models ---
+    all_scores = score_all_models(X_test, df_test)
+
+    # --- Save test_scores.parquet ---
+    save_test_scores(meta, all_scores)
+
+    # --- Save thresholds.json (for Fase 12) ---
+    save_thresholds(all_scores["isolation_forest"])
+
+    # --- Dates for temporal stability ---
+    dates = pd.to_datetime(df_test["created_at"]).values
+
+    # --- Full evaluation: IF-31 (primary) ---
+    logger.info("=" * 60)
+    logger.info("Evaluating IF-31 (primary model)...")
+    eval_if = full_evaluation("isolation_forest", all_scores["isolation_forest"], y_proxy, dates=dates)
+
+    # --- Full evaluation: LOF ---
+    logger.info("Evaluating LOF...")
+    eval_lof = full_evaluation("lof", all_scores["lof"], y_proxy, dates=dates)
+
+    # --- Full evaluation: OC-SVM ---
+    logger.info("Evaluating OC-SVM...")
+    eval_ocsvm = full_evaluation("ocsvm", all_scores["ocsvm"], y_proxy, dates=dates)
+
+    # --- HE4: Model comparison ---
+    logger.info("HE4: Comparing IF vs LOF vs OC-SVM...")
+    he4 = compare_models(
+        y_proxy,
+        {
+            "isolation_forest": all_scores["isolation_forest"],
+            "lof": all_scores["lof"],
+            "ocsvm": all_scores["ocsvm"],
+        },
+    )
+
+    # --- Holm-Bonferroni correction ---
+    p_values = [
+        eval_if["he1"]["p_value"],
+        eval_if["he2"]["auc_roc"],  # placeholder — use actual p-value if available
+        1.0,  # HE3 doesn't have a standard p-value
+        1.0,  # HE4 doesn't have a standard p-value
+    ]
+    # For HE1, we have a real p-value. Others are assessed by thresholds, not p-values.
+    # Apply Holm-Bonferroni only to the p-values that are actual hypothesis tests.
+    holm = {
+        "he1_original_p": eval_if["he1"]["p_value"],
+        "he1_adjusted_p": apply_holm_bonferroni([eval_if["he1"]["p_value"]])[0],
+        "note": "HE2/HE3/HE4 use threshold criteria, not p-values. Holm-Bonferroni applied to HE1 p-value."
+    }
+
+    # --- Proxy type counts ---
+    proxy_types = {}
+    for ptype in ("tipo_a", "tipo_b", "tipo_c", "tipo_d", "tipo_e", "unified"):
+        labels = DataManager.assign_proxy_labels(df_test, ptype, settings)
+        proxy_types[ptype] = {"count": int(labels.sum()), "rate": round(float(labels.mean()), 6)}
+
+    # --- Compile results ---
+    results = {
+        "proxy_used": "unified",
+        "proxy_unified_base_rate": float(y_proxy.mean()),
+        "proxy_unified_count": int(y_proxy.sum()),
+        "proxy_type_counts": proxy_types,
+        "test_set_size": len(y_proxy),
+        "isolation_forest": eval_if,
+        "lof": eval_lof,
+        "ocsvm": eval_ocsvm,
+        "he4": he4,
+        "holm_bonferroni": holm,
+    }
+
+    # --- Save results.json ---
+    path = settings.project_root / "output" / "results.json"
+
+    def default_serializer(obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
+    path.write_text(json.dumps(results, indent=2, default=default_serializer))
+    logger.info(f"Saved results.json → {path}")
+
+    # --- Summary ---
+    elapsed = time.perf_counter() - t0
+    logger.info("=" * 60)
+    logger.info(f"Fase 7 completada en {elapsed / 60:.1f} min")
+    logger.info(f"  HE1 pass: {eval_if['he1']['he1_pass']} (r={eval_if['he1']['rank_biserial_r']:.4f})")
+    logger.info(f"  HE2 pass: {eval_if['he2']['he2_pass']} (AUC={eval_if['he2']['auc_roc']:.4f})")
+    logger.info(f"  HE3 pass: {eval_if['he3']['he3_pass']} (EF@5%={eval_if['he3'].get('ef_at_5pct', 0):.4f})")
+    logger.info(f"  HE4 pass: {he4['he4_pass']} (IF wins {he4['if_wins']}/4)")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,18 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Sensibilidad del proxy: unificado vs. Tipo A vs. amplio}
+\label{tab:sensitivity-proxy}
+\begin{tabular}{lrrr}
+\toprule
+Proxy & AUC-ROC & AP & Tasa base \\
+\midrule
+  unified & 0.6299 & 0.1692 & 0.1053 \\
+  tipo\_a & 0.5757 & 0.0792 & 0.0630 \\
+  wide & 0.5776 & 0.0917 & 0.0751 \\
+\midrule
+  $\Delta$ AUC (tipo\_a) & \multicolumn{3}{c}{0.0542} \\
+  Robusto ($\Delta < 0.05$) & \multicolumn{3}{c}{No} \\
+\bottomrule
+\end{tabular}
+\end{table}

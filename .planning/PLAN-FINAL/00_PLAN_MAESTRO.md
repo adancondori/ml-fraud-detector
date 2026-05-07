@@ -32,6 +32,7 @@ Completar la implementacion empirica de la tesis de deteccion de anomalias trans
 | 9 | `09_REPORTING.md` | Tablas LaTeX + figuras PDF/PNG | — |
 | 10 | `10_ORQUESTADOR.md` | `run_pipeline.py` con CLI | — |
 | 11 | `11_TESTS_CLEANUP_INTEGRACION.md` | Tests, limpieza, integracion tesis | Gate E |
+| 12 | `12_SINGLE_TRANSACTION_SCORER.md` | Scorer individual: transaccion → score + anomalo si/no | Gate F |
 
 **Fase 3.5 es NUEVA** — normaliza el 25.9% de transacciones non-USD usando `default.exchange_rates` (snapshot). Se acepta la tasa actual como aproximacion: la variacion vs. tasas historicas 2025 es < 10% para monedas volatiles (COP, PKR) y < 3% para estables (CAD, AUD, EUR), insuficiente para afectar la deteccion de anomalias. Se documenta como limitacion metodologica en la tesis.
 
@@ -71,6 +72,12 @@ ml-fraud-detector/
 │   │   ├── __init__.py
 │   │   ├── latex_tables.py             # ThesisTableGenerator
 │   │   └── figures.py                  # ThesisFigureGenerator
+│   ├── scoring/                         # NUEVO (Fase 12) — scorer individual
+│   │   ├── __init__.py
+│   │   ├── context.py                  # UserContextProvider (queries ClickHouse)
+│   │   ├── features.py                 # SingleFeatureCalculator (31 features)
+│   │   ├── classifier.py              # ThresholdClassifier + ScoringResult
+│   │   └── scorer.py                  # SingleTransactionScorer (facade)
 │   └── utils/
 │       ├── logger.py                    # MANTENER
 │       └── currency.py                  # NUEVO → CurrencyNormalizer
@@ -125,6 +132,7 @@ ClickHouse (6.7M txns) + JOINs (facilities_users, users) + Warm History (Dic 202
   ▼
 [Fase 6] → output/scores/test_scores.parquet (id + created_at + 3 scores)
             output/results.json (HE1-HE4, bootstrap, temporal)
+            output/models/thresholds.json (threshold calibrado para scorer)
   │
   ▼
 [Fase 7] → output/results_sensitivity.json
@@ -134,6 +142,10 @@ ClickHouse (6.7M txns) + JOINs (facilities_users, users) + Warm History (Dic 202
   ▼
 [Fase 8] → output/tables/table_3_*.tex (incluyendo 3.20-3.23 post-hoc)
             output/figures/*.{pdf,png} (incluyendo post-hoc centro/actor/moneda)
+  │
+  ▼
+[Fase 12] → src/fraud_detector/scoring/ (scorer individual)
+             Transaccion dict → ClickHouse context → 31 features → score → anomalo si/no
 ```
 
 ## Gates obligatorios
@@ -174,6 +186,10 @@ Si el resultado colapsa al remover `user_reversal_ratio_30d` (delta AUC >= 0.02)
 ### Gate E — Reporting y tests
 
 No cerrar Cap 2/3 con tablas manuales; todo artefacto debe salir del pipeline. Tests automaticos pasan.
+
+### Gate F — Equivalencia batch/single (Fase 12)
+
+El scorer individual debe producir scores equivalentes al pipeline batch para las mismas transacciones (tolerancia 5%). Se valida con 100 transacciones aleatorias del test set. Ademas, usuarios sin historial deben devolver scores validos (contexto con zeros, no errores).
 
 ## Principios de implementacion
 
