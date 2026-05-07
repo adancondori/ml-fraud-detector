@@ -4,25 +4,21 @@ set -e
 echo "=== Verifying anomaly_scores deduplication via insert_deduplication_token SETTINGS ==="
 
 # Insert a test row with a dedup token via SETTINGS
+# Note: In ClickHouse, SETTINGS must appear after table name and before VALUES/FORMAT/SELECT.
+# Column list cannot follow SETTINGS — use positional VALUES in table column order.
 clickhouse-client --query "
   INSERT INTO pbp_productionDB_optimized.anomaly_scores
   SETTINGS insert_deduplication_token='dedup-test-token-phase1'
-  (payment_id, facility_id, user_id, scored_at, payment_created_at, amount_usd,
-   raw_score, percentile, risk_level, is_anomaly, model_version, top_factors, features_json)
-  VALUES
-  (99999999, 1, 1, '2025-06-15 10:00:00', '2025-06-15 10:00:00', 25.50,
-   0.85, 0.97, 'critical', 1, 'if-31-v1-test', '[]', '{}')
+  VALUES (99999999, 1, 1, '2025-06-15 10:00:00', '2025-06-15 10:00:00',
+          25.50, 0.85, 0.97, 'critical', 1, 'if-31-v1-test', '[]', '{}')
 "
 
 # Insert a DIFFERENT row with the SAME dedup token — this should be deduplicated
 clickhouse-client --query "
   INSERT INTO pbp_productionDB_optimized.anomaly_scores
   SETTINGS insert_deduplication_token='dedup-test-token-phase1'
-  (payment_id, facility_id, user_id, scored_at, payment_created_at, amount_usd,
-   raw_score, percentile, risk_level, is_anomaly, model_version, top_factors, features_json)
-  VALUES
-  (99999999, 1, 1, '2025-06-15 11:00:00', '2025-06-15 10:00:00', 99.99,
-   0.50, 0.60, 'low', 0, 'if-31-v1-test', '[]', '{}')
+  VALUES (99999999, 1, 1, '2025-06-15 11:00:00', '2025-06-15 10:00:00',
+          99.99, 0.50, 0.60, 'low', 0, 'if-31-v1-test', '[]', '{}')
 "
 
 # Count — should be 1 because insert_deduplication_token prevents the second insert

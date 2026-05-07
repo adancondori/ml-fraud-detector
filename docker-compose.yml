@@ -29,7 +29,7 @@ services:
       - bash
       - -c
       - |
-        pip install --no-cache-dir scikit-learn==1.6.1 joblib numpy pandas loguru &&
+        pip install --no-cache-dir scikit-learn==1.6.1 joblib numpy pandas loguru pydantic pydantic-settings python-dotenv tqdm &&
         pip install --no-cache-dir -e /app &&
         python /app/smoke_test.py &&
         echo 'ml-scorer stub ready — all 5 checks passed' &&

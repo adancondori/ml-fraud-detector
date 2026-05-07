@@ -22,4 +22,5 @@ ENGINE = MergeTree()
 PARTITION BY toYYYYMM(payment_created_at)
 ORDER BY (facility_id, payment_created_at, payment_id)
 TTL payment_created_at + INTERVAL 12 MONTH
-SETTINGS index_granularity = 8192;
+SETTINGS index_granularity = 8192,
+         non_replicated_deduplication_window = 1000;
