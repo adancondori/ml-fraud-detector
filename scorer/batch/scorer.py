@@ -1,18 +1,18 @@
 """BatchScorer — orchestrates the full batch scoring pipeline.
 
 Flow:
-  1. Fetch payments from ClickHouse since cursor
+  1. Fetch payments from ClickHouse in a closed window [cursor_start, cursor_end]
   2. Build batch context via BatchContextProvider (6 queries total)
   3. Score each payment using SingleTransactionScorer internals
   4. INSERT scored rows to anomaly_scores in 10K chunks with dedup tokens
-  5. Return summary dict with processed/scored counts and critical alerts
+  5. Return summary dict with processed/scored counts, critical alerts, and next_cursor
 """
 from __future__ import annotations
 
 import json
 import time
-from datetime import datetime, timezone
-from typing import Dict, List
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional
 
 import numpy as np
 from loguru import logger
@@ -40,7 +40,9 @@ _INSERT_COLUMNS = [
     "features_json",
 ]
 
-# Fetch query — payments since cursor, excluding reversal/free
+# Fetch query — payments in a closed window [cursor_start, cursor_end].
+# Using a closed window makes the payment set deterministic: retries see
+# exactly the same rows and produce identical dedup tokens.
 _FETCH_SQL = """
 SELECT
     payment_id,
@@ -57,10 +59,21 @@ SELECT
     currency,
     status
 FROM pbp_productionDB_optimized.payments FINAL
-WHERE created_at >= {cursor:DateTime}
+WHERE created_at >= {cursor_start:DateTime}
+  AND created_at <= {cursor_end:DateTime}
   AND _peerdb_is_deleted = 0
   AND payment_method NOT IN ('reversal', 'free')
 ORDER BY created_at ASC
+"""
+
+# Query to resolve cursor_end as the max created_at available since cursor_start.
+# Running this first pins the upper bound before we fetch the full result set.
+_CURSOR_END_SQL = """
+SELECT max(created_at)
+FROM pbp_productionDB_optimized.payments FINAL
+WHERE created_at >= {cursor_start:DateTime}
+  AND _peerdb_is_deleted = 0
+  AND payment_method NOT IN ('reversal', 'free')
 """
 
 
@@ -91,27 +104,41 @@ class BatchScorer:
     # ------------------------------------------------------------------
 
     def score_batch(self, cursor: datetime) -> Dict:
-        """Score all payments created since cursor and insert to anomaly_scores.
+        """Score all payments in a closed window [cursor, cursor_end] and insert.
+
+        The upper bound (cursor_end) is pinned before fetching so retries see
+        the same payment set, making dedup tokens fully deterministic.
 
         Args:
-            cursor: Fetch payments where created_at >= cursor.
+            cursor: Lower bound — fetch payments where created_at >= cursor.
 
         Returns:
             dict with keys:
               - processed (int): total payments fetched
               - scored (int): total payments scored and inserted
               - critical_alerts (list[dict]): payments with risk_level == "critical"
+              - next_cursor (datetime | None): cursor_end + 1 second, or None if no
+                payments were found; the Rails client should use this as the next
+                cursor to avoid re-processing the same window.
         """
         t_start = time.monotonic()
         logger.info(f"BatchScorer: starting batch from cursor={cursor.isoformat()}")
 
-        # Step 1: Fetch payments
-        payments = self._fetch_payments(cursor)
+        # Step 1: Pin cursor_end then fetch payments in the closed window
+        cursor_end = self._resolve_cursor_end(cursor)
+        if cursor_end is None:
+            logger.info("BatchScorer: no payments found since cursor — nothing to do")
+            return {"processed": 0, "scored": 0, "critical_alerts": [], "next_cursor": None}
+
+        payments = self._fetch_payments(cursor, cursor_end)
         total_fetched = len(payments)
-        logger.info(f"BatchScorer: fetched {total_fetched} payments")
+        logger.info(
+            f"BatchScorer: fetched {total_fetched} payments "
+            f"[{cursor.isoformat()} … {cursor_end.isoformat()}]"
+        )
 
         if not payments:
-            return {"processed": 0, "scored": 0, "critical_alerts": []}
+            return {"processed": 0, "scored": 0, "critical_alerts": [], "next_cursor": None}
 
         # Step 2: Build batch context (6 queries total)
         t_ctx = time.monotonic()
@@ -123,11 +150,14 @@ class BatchScorer:
         )
 
         # Step 3: Score each payment
-        scored_rows, critical_alerts = self._score_all(payments, ctx_map, cursor)
+        model_version = getattr(self._scorer._model, "_version", "if-31-v1")
+        scored_rows, critical_alerts = self._score_all(
+            payments, ctx_map, model_version
+        )
 
         # Step 4: INSERT in 10K chunks with dedup tokens
         total_scored = len(scored_rows)
-        self._insert_chunks(scored_rows, cursor)
+        self._insert_chunks(scored_rows, cursor, cursor_end, model_version)
 
         elapsed = time.monotonic() - t_start
         rate = total_scored / elapsed if elapsed > 0 else 0
@@ -136,19 +166,34 @@ class BatchScorer:
             f"in {elapsed:.1f}s ({rate:.0f} txn/s), "
             f"{len(critical_alerts)} critical alerts"
         )
+        next_cursor = cursor_end + timedelta(seconds=1)
         return {
             "processed": total_fetched,
             "scored": total_scored,
             "critical_alerts": critical_alerts,
+            "next_cursor": next_cursor,
         }
 
     # ------------------------------------------------------------------
-    # Step 1: Fetch payments
+    # Step 1: Resolve cursor_end, then fetch payments in closed window
     # ------------------------------------------------------------------
 
-    def _fetch_payments(self, cursor: datetime) -> List[dict]:
-        """Fetch all eligible payments since cursor as a list of dicts."""
-        result = self._ch.query(_FETCH_SQL, parameters={"cursor": cursor})
+    def _resolve_cursor_end(self, cursor_start: datetime) -> Optional[datetime]:
+        """Return the max created_at available since cursor_start, or None."""
+        result = self._ch.query(
+            _CURSOR_END_SQL, parameters={"cursor_start": cursor_start}
+        )
+        rows = result.result_rows
+        if not rows or rows[0][0] is None:
+            return None
+        return rows[0][0]
+
+    def _fetch_payments(self, cursor_start: datetime, cursor_end: datetime) -> List[dict]:
+        """Fetch all eligible payments in the closed window [cursor_start, cursor_end]."""
+        result = self._ch.query(
+            _FETCH_SQL,
+            parameters={"cursor_start": cursor_start, "cursor_end": cursor_end},
+        )
         column_names = [
             "payment_id", "user_id", "facility_id", "reservation_paid_out",
             "created_at", "discount", "tip", "payment_method", "category",
@@ -167,9 +212,14 @@ class BatchScorer:
         self,
         payments: List[dict],
         ctx_map: Dict,
-        cursor: datetime,
+        model_version: str,
     ):
         """Score each payment and collect rows for INSERT.
+
+        Args:
+            payments: Payment dicts from _fetch_payments.
+            ctx_map: Context map from BatchContextProvider.
+            model_version: Version string already resolved by score_batch.
 
         Returns:
             (scored_rows, critical_alerts)
@@ -177,9 +227,6 @@ class BatchScorer:
         scorer = self._scorer
         scored_rows = []
         critical_alerts = []
-
-        # Derive model version from scorer internals (use joblib metadata if available)
-        model_version = getattr(scorer._model, "_version", "if-31-v1")
 
         t_score = time.monotonic()
         for payment in tqdm(payments, desc="Scoring", unit="txn", leave=False):
@@ -250,14 +297,21 @@ class BatchScorer:
     # Step 4: INSERT in chunks
     # ------------------------------------------------------------------
 
-    def _insert_chunks(self, scored_rows: List[list], cursor: datetime) -> None:
+    def _insert_chunks(
+        self,
+        scored_rows: List[list],
+        cursor: datetime,
+        cursor_end: datetime,
+        model_version: str,
+    ) -> None:
         """INSERT scored rows to anomaly_scores in insert_chunk_size batches.
 
-        Each chunk uses a deterministic dedup token:
-            f"batch-{cursor.isoformat()}-chunk-{chunk_index}"
+        Each chunk uses a fully deterministic dedup token:
+            f"batch-{cursor_start}-{cursor_end}-{model_version}-chunk-{chunk_index}"
 
-        This ensures retrying the same cursor run produces the same tokens,
-        so ClickHouse deduplication correctly skips already-inserted chunks.
+        Including cursor_end and model_version ensures tokens are stable across
+        retries even if a different model is loaded between calls, and eliminates
+        the non-determinism that arose when new payments arrived in an open window.
         """
         chunk_size = self._insert_chunk_size
         total = len(scored_rows)
@@ -270,7 +324,10 @@ class BatchScorer:
 
         for chunk_index, chunk_start in enumerate(range(0, total, chunk_size)):
             chunk = scored_rows[chunk_start: chunk_start + chunk_size]
-            token = f"batch-{cursor.isoformat()}-chunk-{chunk_index}"
+            token = (
+                f"batch-{cursor.isoformat()}-{cursor_end.isoformat()}"
+                f"-{model_version}-chunk-{chunk_index}"
+            )
 
             t_ins = time.monotonic()
             self._ch.insert(

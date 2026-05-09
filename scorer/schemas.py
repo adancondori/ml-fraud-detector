@@ -65,6 +65,7 @@ class BatchScoreResponse(BaseModel):
     processed: int
     scored: int
     critical_alerts: List[CriticalAlert]
+    next_cursor: Optional[datetime] = None
 
 
 class HealthResponse(BaseModel):

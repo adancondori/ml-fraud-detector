@@ -75,4 +75,5 @@ def score_batch(
         processed=result["processed"],
         scored=result["scored"],
         critical_alerts=[CriticalAlert(**a) for a in result["critical_alerts"]],
+        next_cursor=result.get("next_cursor"),
     )

@@ -182,6 +182,9 @@ def test_score_batch_valid_request(monkeypatch):
     """Mock BatchScorer.score_batch to avoid real ClickHouse calls."""
     from unittest.mock import patch
 
+    from datetime import datetime, timedelta
+
+    cursor_end = datetime(2026, 4, 28, 15, 0, 0)
     fake_result = {
         "processed": 10,
         "scored": 10,
@@ -195,6 +198,7 @@ def test_score_batch_valid_request(monkeypatch):
                 "amount_usd": 500.0,
             }
         ],
+        "next_cursor": cursor_end + timedelta(seconds=1),
     }
 
     with patch.object(BatchScorer, "score_batch", return_value=fake_result):
@@ -211,6 +215,9 @@ def test_score_batch_valid_request(monkeypatch):
     assert len(body["critical_alerts"]) == 1
     assert body["critical_alerts"][0]["payment_id"] == 999
     assert body["critical_alerts"][0]["risk_level"] == "critical"
+    # next_cursor must be present and parseable as an ISO8601 datetime
+    assert body["next_cursor"] is not None
+    assert datetime.fromisoformat(body["next_cursor"]) == cursor_end + timedelta(seconds=1)
 
 
 # ---------------------------------------------------------------------------

@@ -108,9 +108,14 @@ def test_empty_batch_returns_empty_dict():
 # ---------------------------------------------------------------------------
 
 def test_score_batch_empty_cursor():
-    """When fetch returns 0 payments, score_batch returns the zero summary."""
+    """When _resolve_cursor_end returns None, score_batch returns the zero summary."""
     mock_scorer = MagicMock()
-    mock_ch = _make_mock_ch_client(result_rows=[])
+
+    # _resolve_cursor_end query returns a row with None (no payments found)
+    cursor_end_result = MagicMock()
+    cursor_end_result.result_rows = [(None,)]
+    mock_ch = MagicMock()
+    mock_ch.query.return_value = cursor_end_result
 
     batch_scorer = BatchScorer(scorer=mock_scorer, ch_client=mock_ch)
     cursor = datetime(2026, 4, 28, 0, 0, 0)
@@ -119,6 +124,7 @@ def test_score_batch_empty_cursor():
     assert result["processed"] == 0
     assert result["scored"] == 0
     assert result["critical_alerts"] == []
+    assert result["next_cursor"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -126,21 +132,24 @@ def test_score_batch_empty_cursor():
 # ---------------------------------------------------------------------------
 
 def test_score_batch_with_payments():
-    """Mocked scorer scores 2 payments and inserts once with dedup token."""
-    # Build the payment rows the fetch query would return
+    """Mocked scorer scores 2 payments; verifies new token format and next_cursor."""
     cursor = datetime(2026, 4, 28, 0, 0, 0, tzinfo=timezone.utc)
+    cursor_end = datetime(2026, 4, 28, 15, 0, 0)
+
     fetch_rows = [
         (101, 42, 7, 100.0, datetime(2026, 4, 28, 14, 30, 0), 0.0, 0.0, "card", "reservation", False, False, "USD", "paid"),
         (102, 43, 7, 120.0, datetime(2026, 4, 28, 15, 0, 0), 0.0, 0.0, "card", "reservation", False, False, "USD", "paid"),
     ]
 
     mock_ch = MagicMock()
-    # First query is _fetch_payments, rest are context queries (6), last is insert
+    # query call order: _resolve_cursor_end, _fetch_payments, 6x context queries
+    cursor_end_result = MagicMock()
+    cursor_end_result.result_rows = [(cursor_end,)]
     fetch_result = MagicMock()
     fetch_result.result_rows = fetch_rows
     context_result = MagicMock()
     context_result.result_rows = []
-    mock_ch.query.side_effect = [fetch_result] + [context_result] * 6
+    mock_ch.query.side_effect = [cursor_end_result, fetch_result] + [context_result] * 6
 
     # Mock scorer internals
     mock_scorer = MagicMock()
@@ -149,12 +158,6 @@ def test_score_batch_with_payments():
     mock_scorer._model.score_samples.return_value = np.array([-0.75])
     mock_scorer._classifier.classify.return_value = (True, "high", 0.92)
     mock_scorer._model._version = "if-31-v1"
-
-    with patch.object(
-        BatchScorer, "_explain_top_factors" if hasattr(BatchScorer, "_explain_top_factors") else "_score_all",
-        wraps=None,
-    ):
-        pass  # We'll let _score_all run but patch SingleTransactionScorer._explain_top_factors
 
     from fraud_detector.scoring.scorer import SingleTransactionScorer
     with patch.object(
@@ -169,15 +172,20 @@ def test_score_batch_with_payments():
     assert result["scored"] == 2
     assert isinstance(result["critical_alerts"], list)
 
-    # Verify INSERT was called once with insert_deduplication_token in settings
+    # next_cursor must be cursor_end + 1 second
+    from datetime import timedelta
+    assert result["next_cursor"] == cursor_end + timedelta(seconds=1)
+
+    # Verify INSERT was called once with the new deterministic dedup token
     mock_ch.insert.assert_called_once()
     call_kwargs = mock_ch.insert.call_args
-    assert "settings" in call_kwargs.kwargs or len(call_kwargs.args) >= 4
-    # Check the settings contain the dedup token
     settings = call_kwargs.kwargs.get("settings") or {}
     assert "insert_deduplication_token" in settings
     token = settings["insert_deduplication_token"]
+    # Token must contain cursor_start, cursor_end, model_version, and chunk index
     assert token.startswith("batch-")
+    assert cursor_end.isoformat() in token
+    assert "if-31-v1" in token
     assert "chunk-0" in token
 
 
@@ -188,16 +196,19 @@ def test_score_batch_with_payments():
 def test_critical_alerts_collected():
     """Payments with risk_level='critical' appear in critical_alerts."""
     cursor = datetime(2026, 4, 28, 0, 0, 0, tzinfo=timezone.utc)
+    cursor_end = datetime(2026, 4, 28, 14, 30, 0)
     fetch_rows = [
         (999, 42, 7, 500.0, datetime(2026, 4, 28, 14, 30, 0), 0.0, 0.0, "card", "reservation", False, False, "USD", "paid"),
     ]
 
     mock_ch = MagicMock()
+    cursor_end_result = MagicMock()
+    cursor_end_result.result_rows = [(cursor_end,)]
     fetch_result = MagicMock()
     fetch_result.result_rows = fetch_rows
     context_result = MagicMock()
     context_result.result_rows = []
-    mock_ch.query.side_effect = [fetch_result] + [context_result] * 6
+    mock_ch.query.side_effect = [cursor_end_result, fetch_result] + [context_result] * 6
 
     mock_scorer = MagicMock()
     mock_scorer._feature_calc.calculate.return_value = np.zeros(31)
