@@ -96,5 +96,7 @@ app = FastAPI(
 
 # Routers registered after their modules are created
 from scorer.routers.model import router as model_router  # noqa: E402
+from scorer.routers.score import router as score_router  # noqa: E402
 
 app.include_router(model_router, prefix="/api/v1")
+app.include_router(score_router, prefix="/api/v1")
