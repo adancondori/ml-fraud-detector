@@ -17,7 +17,9 @@ services:
       - pbc-network
 
   ml-scorer:
-    image: python:3.12-slim
+    build:
+      context: .
+      dockerfile: docker/scorer/Dockerfile
     container_name: ml-scorer
     working_dir: /app
     volumes:
@@ -25,15 +27,6 @@ services:
     environment:
       MODEL_DIR: /app/output/models
       PYTHONPATH: /app/src
-    command:
-      - bash
-      - -c
-      - |
-        pip install --no-cache-dir scikit-learn==1.6.1 joblib numpy pandas loguru pydantic pydantic-settings python-dotenv tqdm &&
-        pip install --no-cache-dir -e /app &&
-        python /app/smoke_test.py &&
-        echo 'ml-scorer stub ready — all 5 checks passed' &&
-        tail -f /dev/null
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -41,6 +34,12 @@ services:
       - '8765:8000'
     networks:
       - pbc-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   clickhouse_data:

@@ -1,7 +1,21 @@
 # Pinned dependencies for ml-scorer container (Python 3.12)
-# Must match training environment exactly for pickle compatibility
+# Core ML (must match training environment for pickle compatibility)
 scikit-learn==1.6.1
 joblib>=1.4.0
 numpy>=1.24.0,<2.0.0
 pandas>=2.0.0
+
+# FastAPI stack
+fastapi==0.124.4
+uvicorn==0.38.0
+pydantic==2.12.5
+pydantic-settings==2.11.0
+httpx==0.28.1
+
+# ClickHouse
+clickhouse-connect==0.10.0
+
+# Utilities
 loguru>=0.7.0
+tqdm>=4.60.0
+python-dotenv>=1.0.0
