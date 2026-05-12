@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import auc, precision_recall_curve, roc_curve
+from sklearn.metrics import auc, average_precision_score, precision_recall_curve, roc_curve
 
 from fraud_detector.utils.logger import logger
 
@@ -54,9 +54,9 @@ def fig_pr_curves(scores_dict: Dict[str, np.ndarray], proxy: np.ndarray, output_
     fig, ax = plt.subplots(figsize=(6, 5))
     for model, scores in scores_dict.items():
         prec, rec, _ = precision_recall_curve(proxy, scores)
-        ap = np.trapz(prec, rec)
+        ap = average_precision_score(proxy, scores)
         ax.plot(rec, prec, color=MODEL_COLORS.get(model, "gray"),
-                label=f"{MODEL_NAMES.get(model, model)} (AP={abs(ap):.4f})")
+                label=f"{MODEL_NAMES.get(model, model)} (AP={ap:.4f})")
     ax.axhline(y=base_rate, color="gray", linestyle="--", alpha=0.5,
                label=f"Tasa base ({base_rate:.4f})")
     ax.set_xlabel("Recall")

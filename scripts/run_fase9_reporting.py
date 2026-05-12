@@ -219,7 +219,15 @@ def step3_feature_tables():
     from fraud_detector.data.loader import DataManager
     split_rows = []
     for split in ["train", "val", "test"]:
-        df = pd.read_parquet(settings.processed_dir / f"{split}_features.parquet", columns=["created_at", "status"])
+        df = pd.read_parquet(
+            settings.processed_dir / f"{split}_features.parquet",
+            columns=[
+                "created_at",
+                "status",
+                "user_discount_ratio_30d",
+                "user_txn_count_24h",
+            ],
+        )
         proxy = DataManager.assign_proxy_labels(df, "unified", settings)
         split_rows.append(
             f"  {split.capitalize()} & {len(df):,} & {proxy.mean()*100:.2f}\\% & "
