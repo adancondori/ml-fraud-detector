@@ -1,0 +1,44 @@
+81be8c2344cfe7d16c68bf19d8ed178d744f3b9a599fb875effc92dd04d9a175  output/results_engineered.json
+c762c79e50c76b87b8b10d89f6107a5d68dafd80fe1ca5dda000594c7c8279b1  output/results_ensemble.json
+fd2f6836ae53a71ad4e060b24bbfaff20b9b5c4d88bd1f5eb05b9ce46173a370  output/results_with_tokens.json
+01865e8479dd182d7140680c218d51c82d5548b9a839bc75afc65ad38d28d1c0  output/results_final.json
+71355f495d3e51a7649114bc1af451d7cae3105bb9d8e0b72faeda0c66607ca7  output/results_posthoc.json
+737ef598aa3f4081a02a2759bf7f311a0c5c73f217830215a6a98a3fb2a36ad3  output/results.json
+e99777c96d944cceacf53d970d16bfc817630120b71c720dda0de2a4d4a34cc0  output/results_he4_final.json
+76c267dbb7e38eafe9903aeb5fbfcd468d4e8a02e9439dfbf307b34eb4e172d9  output/results_shap_importance.json
+3f91ffa7ff6c5e9b4b25c42faf03395ed77eea7976ef37852b8d83b0a7961657  output/results_honest_auc.json
+6e7bb5b05cbc6aa587c8fcf1182f9506f9ec8f86fe8ef4bbd6eb33d6979f7d65  output/results_clean_honest.json
+8aacd5ecbabcfbb74437af0e51f464c509cedf83393e089ba146dc6ecb42650e  output/results_sensitivity.json
+1c7c4fc559a4b423cf94d0862ef11b006b6f1687b82bce772ebc666b9dde0b2f  output/results_validation_final.json
+e45814fd57eec99a0b37199ecb7f2a72aef20e6b4fad50206233e5d22ef6c2c9  output/results_grid_unified.json
+2817b825c6a3c8b5d5a683ee40bdbd468684820e57fe1a551293a1d6a5dd5003  output/metrics/cap2_summary.json
+e283326137c127f159315cea1005b4f0e4ddf4c37a6007517d5c4eb81bf1ebb8  output/models/final_feature_list.json
+4a449b8e0aa72d93ef59ba171af6edbf1c0776b9849e763aa200f2d7ec479fb5  output/models/best_params_ocsvm.json
+75f48e2ec5d3e6eae7cb8858c18396a03946b9747599c27c2c75eb8796d1be24  output/models/best_params_if.json
+e5d1dd0ed41081a954ce548bb8d174910862da40b398241c21cb0b468083bcaa  output/models/thresholds.json
+8d41e65c64e13fe038ef6ebde781b9dcdd6c39f2ee22d89b1ae13613f701c467  output/models/best_params_lof.json
+5168aaf962875c4fec84d1da57e311245d30d04a3fc0dd59dbda4bb393d4b170  output/extended/feature_manifest.json
+e0e51462215570e5757c87dcbbf331ab29fcd8f93bab6fc722070295ecbcfb11  output/feasibility/feasibility_summary.json
+02d665d9c86cad90ab2f7a977ad52f579dbd5fea416398a8b8623a2e4f57b80e  output/feasibility/feasibility_alt_proxies_summary.json
+08c94caf28558bf49bc2672519c90daf16a35e40aa967ac94386913db6894cc8  output/manifests/val_manifest.json
+e27fe87718436a9cfbaa18de840d8bce645b44788f80b20dd190f1123889da46  output/manifests/train_manifest.json
+11a39986a23dfd48b73544a90999271809192710c6d104f7fddd6b420f8b035c  output/manifests/test_manifest.json
+9ea727d2202cdefcf61e9044f30dfbc1a954ae54b4cc10680538d9b5133789a2  output/manifests/warm_manifest.json
+b899a663baa2754049e97884274879c22e8d94e298fc9dae7ffbf75ac3d038ac  output/v4/benchmarks/feature_list_clean_no_ru.json
+fe83333b1e02c993263e564773460ce91ac2b91f5df6723dd5f434bb16a16454  output/v4/benchmarks/baseline_hgb_clean_strict.json
+1687dcdca1d1659fcdeb6f9e358eac2320add27ece0d85459c7d83072897623c  output/v4/benchmarks/baseline_hgb_clean.json
+234f94a9fabfda9430e742ad5786bbf1f0af74b85736195aefa1b9ccf86f0fe1  output/v4/benchmarks/baseline_hgb_clean_no_ru.json
+b899a663baa2754049e97884274879c22e8d94e298fc9dae7ffbf75ac3d038ac  output/v4/benchmarks/feature_list_clean_strict.json
+93930e2b9d6245408e9b8708aa648c97b774b25ee00cf7d729a3b31da025d346  output/v4/benchmarks/feature_list_clean.json
+862081f44db26a6c521073314269c66ccafc395ae130b5c64aa4bf00132a1bfa  output/v4/benchmarks/simple_rule_baseline.json
+1f369cbc9041f09e6be3f10b1b56690bda072c5341ed810f05de28c8c3586a3d  output/extended/tables/gate3_result.json
+---joblibs---
+-rw-r--r--@ 1 eidan  staff    19624537 Apr 20 08:00 output/models/feature_engineer.joblib
+-rw-r--r--@ 1 eidan  staff     2566365 May  3 01:02 output/models/isolation_forest.joblib
+-rw-r--r--@ 1 eidan  staff     2538477 May  3 01:02 output/models/isolation_forest_21.joblib
+-rw-r--r--@ 1 eidan  staff     2377869 May  3 01:02 output/models/isolation_forest_30.joblib
+-rw-r--r--@ 1 eidan  staff     3343661 Jun 13 22:29 output/models/isolation_forest_final.joblib
+-rw-r--r--@ 1 eidan  staff  1668929030 May  3 09:15 output/models/lof.joblib
+-rw-r--r--@ 1 eidan  staff     2684351 May  3 09:16 output/models/ocsvm.joblib
+-rw-r--r--@ 1 eidan  staff        2076 Apr 28 22:55 output/models/scaler.joblib
+-rw-r--r--@ 1 eidan  staff        1143 Jun 13 22:29 output/models/scaler_final.joblib

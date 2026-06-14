@@ -4,7 +4,7 @@
 Generates:
   output/figures/shap_summary.{pdf,png}        Beeswarm summary, top 20 features
   output/figures/shap_bar_top20.{pdf,png}      Mean(|SHAP|) bar chart, top 20
-  Tesis-Latex/tablas/table_3_34_feature_importance.tex
+  Tesis-Latex/tablas/table_3_39_feature_importance.tex
   output/results_shap_importance.json
 
 Methodology:
@@ -273,7 +273,7 @@ def main():
 
     # --- LaTeX table
     render_tex_table(df_imp, df_groups,
-                     TABLES_DIR / "table_3_34_feature_importance.tex")
+                     TABLES_DIR / "table_3_39_feature_importance.tex")
 
     # --- JSON dump for traceability
     out = {
