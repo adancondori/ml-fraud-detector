@@ -28,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from config.config import settings
+from fraud_detector.data.loader import DataManager
 from fraud_detector.features.engineering import FEATURE_NAMES, FEATURE_NAMES_21, FEATURE_NAMES_30
 from fraud_detector.features.preprocessor import UnsupervisedPreprocessor
 from fraud_detector.models.trainer import ModelTrainer
@@ -42,12 +43,16 @@ def load_data():
     X_train = np.load(scores_dir / "X_train.npy")
     X_val = np.load(scores_dir / "X_val.npy")
 
-    df_val = pd.read_parquet(data_dir / "val_features.parquet", columns=["status"])
-    y_val_proxy = df_val["status"].isin(settings.strict_proxy_list).astype(np.int8).values
+    # Grid search optimizes against the SAME proxy that the final HE2 evaluation
+    # uses (unified = OR(A,B,C,D,E)). Using strict_proxy_list (= Tipo A only) here
+    # broke train/validate/test consistency: hyperparameters chosen for Tipo A
+    # were then reported on unified — see run_fase7_evaluation.py:45.
+    df_val = pd.read_parquet(data_dir / "val_features.parquet")
+    y_val_proxy = DataManager.assign_proxy_labels(df_val, "unified", settings).to_numpy()
 
     logger.info(
         f"Loaded: X_train={X_train.shape}, X_val={X_val.shape}, "
-        f"proxy_positive={y_val_proxy.sum():,} ({y_val_proxy.mean() * 100:.2f}%)"
+        f"proxy_unified_positive={y_val_proxy.sum():,} ({y_val_proxy.mean() * 100:.2f}%)"
     )
     return X_train, X_val, y_val_proxy
 

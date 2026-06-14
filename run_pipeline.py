@@ -136,22 +136,65 @@ def step1_extract():
 
 
 def step2_engineer():
+    """Feature engineering with warm-history carry-over for val/test.
+
+    Train: fit on warm+train combined, transform combined, keep train portion.
+    Val:   transform with warm = last 35 days of train + method state from training.
+    Test:  transform with warm = last 35 days of val + method state through val.
+
+    Without warm carry-over, ~50% of val/test users appeared "new" because
+    their rolling-30d history from prior splits was discarded — a bug that
+    suppressed AUC by depriving the model of velocity/behavior features for
+    half the dataset.
+    """
     import pandas as pd
     from fraud_detector.features.engineering import FeatureEngineer
+
+    WARM_TAIL_DAYS = 35  # 30d rolling + 5d safety
+
     fe = FeatureEngineer()
     df_warm = pd.read_parquet(settings.processed_dir / "warm_raw.parquet")
-    for split in ["train", "val", "test"]:
-        df = pd.read_parquet(settings.processed_dir / f"{split}_raw.parquet")
-        if split == "train":
-            df_combined = pd.concat([df_warm, df], ignore_index=True)
-            fe.fit(df_combined)
-            result = fe.transform(df_combined)
-            result = result.iloc[len(df_warm):]
-        else:
-            result = fe.transform(df)
-        result.to_parquet(settings.processed_dir / f"{split}_features.parquet", index=False)
-        logger.info(f"  {split}: {len(result):,} rows")
-        del df, result
+    df_train_raw = pd.read_parquet(settings.processed_dir / "train_raw.parquet")
+
+    # TRAIN: fit on warm+train combined, transform combined, keep train portion
+    df_combined = pd.concat([df_warm, df_train_raw], ignore_index=True)
+    fe.fit(df_combined)
+    train_result = fe.transform(df_combined).iloc[len(df_warm):].reset_index(drop=True)
+    train_result.to_parquet(settings.processed_dir / "train_features.parquet", index=False)
+    logger.info(f"  train: {len(train_result):,} rows")
+    del df_combined, train_result
+
+    # VAL: warm = last 35d of train, method state from training
+    df_val_raw = pd.read_parquet(settings.processed_dir / "val_raw.parquet")
+    cutoff_val = df_train_raw["created_at"].max() - pd.Timedelta(days=WARM_TAIL_DAYS)
+    warm_for_val = df_train_raw[df_train_raw["created_at"] >= cutoff_val].copy()
+    logger.info(f"  val warm: {len(warm_for_val):,} rows (last {WARM_TAIL_DAYS}d of train)")
+    state_train = fe.get_feature_state()
+    val_result, state_val = fe.transform_with_warm_history(
+        df_split=df_val_raw,
+        df_warm=warm_for_val,
+        method_state=state_train,
+        return_state=True,
+    )
+    val_result.to_parquet(settings.processed_dir / "val_features.parquet", index=False)
+    logger.info(f"  val: {len(val_result):,} rows")
+    del warm_for_val, val_result
+
+    # TEST: warm = last 35d of val, method state accumulated through val
+    df_test_raw = pd.read_parquet(settings.processed_dir / "test_raw.parquet")
+    cutoff_test = df_val_raw["created_at"].max() - pd.Timedelta(days=WARM_TAIL_DAYS)
+    warm_for_test = df_val_raw[df_val_raw["created_at"] >= cutoff_test].copy()
+    logger.info(f"  test warm: {len(warm_for_test):,} rows (last {WARM_TAIL_DAYS}d of val)")
+    test_result, _ = fe.transform_with_warm_history(
+        df_split=df_test_raw,
+        df_warm=warm_for_test,
+        method_state=state_val,
+        return_state=True,
+    )
+    test_result.to_parquet(settings.processed_dir / "test_features.parquet", index=False)
+    logger.info(f"  test: {len(test_result):,} rows")
+    del df_train_raw, df_val_raw, df_test_raw, warm_for_test, test_result
+
     fe.save(str(settings.models_output_dir / "feature_engineer.joblib"))
 
 
