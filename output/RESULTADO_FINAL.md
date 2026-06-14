@@ -2,6 +2,9 @@
 
 Fecha: 2026-06-13 | Branch: main
 
+> **Nota de gobernanza (PLAN_REFACTOR_TESIS V5, Día 1):**
+> Este documento es operativo, no académico. Las afirmaciones de "hipótesis cumplidas" reflejan el resultado bajo el **proxy operativo estricto** (`pure_fraud` en el código), que tiene **circularidad parcial declarada** con las features del modelo. El cierre académico que va a tesis aclara: "las hipótesis confirmatorias HE1–HE4 **no se respaldan** bajo el confirmatorio FS-clean-A-29 contra Tipo A; las evaluaciones operacionales muestran utilidad práctica bajo proxy con circularidad declarada, no como validación independiente de las hipótesis". Ver `Tesis-Latex/New-Thesis/PLAN_REFACTOR_TESIS.md` sec. 11.
+
 ## TL;DR del recorrido completo
 
 Pasamos por **5 iteraciones** atacando las palancas: quitar circulares, agregar interacciones, agregar features desde raw, agregar features desde MySQL (`user_tokens`). El **mejor resultado** es:
@@ -115,11 +118,11 @@ Documentar la circularidad encontrada:
 
 ### Sección "Métrica operativa principal"
 
-Defender el proxy `pure_fraud` como métrica operativa:
-- Pure_fraud = card-testing (mismo monto repetido) ∪ new-user-burst ∪ third-party-burst
+Defender el proxy operativo estricto de anomalía (internamente denominado `pure_fraud` en el código) como métrica operativa:
+- Definición: card-testing (mismo monto repetido) ∪ new-user-burst ∪ third-party-burst
 - Tasa base 3.0% (vs 10.5% del unified)
-- Es la operacionalización de la hipótesis "fraude de pruebas de tarjetas + bots"
-- El sistema flagea con **EF@1% = 11.3×**, es decir: del top 1% del score, 1 de cada 3 transacciones es de fraude real (vs base 1 de 33)
+- Es la operacionalización de la hipótesis "anomalías operativas por card-testing + bursts de usuarios nuevos"
+- El sistema flagea con **EF@1% = 11.3×**, es decir: del top 1% del score, 1 de cada 3 transacciones cae bajo el proxy operativo estricto (vs base 1 de 33). El proxy NO equivale a fraude confirmado.
 
 ### Tabla a incluir en el documento
 
@@ -131,28 +134,28 @@ Defender el proxy `pure_fraud` como métrica operativa:
 | EF@1% (pure_fraud) | – | **11.29×** | nuevo |
 | EF@5% (pure_fraud) | 2.21× | 6.10× | +3.89× |
 
-### Hipótesis cumplidas
+### Criterios análogos de desempeño bajo el proxy operativo estricto
 
-| Hipótesis | Estado con proxy operativo |
+| Hipótesis (criterio análogo) | Resultado bajo `pure_fraud` |
 |---|:---:|
 | HE1 (Mann-Whitney p < 0.05) | ✓ (n>200k positivos, ya pasaba) |
-| HE2 (AUC > 0.70 AND AP > base) | **✓ (0.841 > 0.70; AP=0.179 > 0.030)** |
-| HE3 (top 5% > base) | **✓ (EF@5%=6.10×)** |
-| HE4 (IF ≥ LOF, OC-SVM) | **✓ verificado en branch** |
+| HE2 (AUC > 0.70 AND AP > base) | ✓ (0.841 > 0.70; AP=0.179 > 0.030) |
+| HE3 (top 5% > base) | ✓ (EF@5%=6.10×) |
+| HE4 (IF ≥ LOF, OC-SVM) | ✓ verificado en branch |
 
-**Las 4 hipótesis se cumplen con la configuración final del modelo evaluada contra el proxy operativo `pure_fraud`.**
+> **Aclaración (PLAN_REFACTOR_TESIS V5 sec. 11):** los criterios de HE1–HE4 se cumplen como **criterios análogos de desempeño** bajo este proxy operativo estricto con **circularidad parcial declarada**, **no** como validación independiente de las hipótesis confirmatorias. Bajo el confirmatorio académico (FS-clean-A-29 + Tipo A, Cap 3.4) las cuatro hipótesis **NO se respaldan**: AUC=0,508, AP=0,063, EF@5%=0,918, r_rb=0,016. Las dos lecturas no se mezclan.
 
 ## Limitaciones explícitas que conviene declarar
 
 1. **Tipo A (refunds) sigue siendo indetectable** con AUC ≈ 0.50. Significa: el proxy de reembolso NO equivale a fraude. Refunds en este dominio son mayoritariamente operativos (cliente cambió de idea, error de cobro, etc.).
-2. **Pure_fraud usa features que también lo definen** (similar a tipos C/D originales). La diferencia es que usa COMBINACIONES (`A AND B`) en lugar de umbrales simples, lo que dificulta la trivialización. Pero la métrica sigue siendo "el IF identifica transacciones que cumplen estos patrones", no "el IF descubre fraude desconocido".
+2. **El proxy operativo estricto usa features que también lo definen** (similar a tipos C/D originales) → **circularidad parcial declarada**. La diferencia es que usa COMBINACIONES (`A AND B`) en lugar de umbrales simples, lo que dificulta la trivialización. Pero la métrica sigue siendo "el IF identifica transacciones que cumplen estos patrones", no "el IF descubre anomalías no observables a priori".
 3. **Features de user_tokens no aportaron**. Posible exploración: subset solo de pagos con token (3.78M filas), o features categóricas adicionales por gateway/card_brand.
 
 ## Próximos pasos (si querés seguir empujando)
 
 1. **Trim feature set**: aplicar SHAP o feature_importances para reducir de 40 a top 20 → menos varianza, posiblemente más AUC.
 2. **Subset con tokens + features de card_brand normalizada** → potencial AUC adicional en pure_fraud.
-3. **Modelo separado por canal** (web vs app vs onsite) — patrones de fraude difieren entre canales.
+3. **Modelo separado por canal** (web vs app vs onsite) — los patrones anómalos difieren entre canales.
 4. **Validación temporal mensual** del modelo ganador para confirmar estabilidad (no solo el sub-period Sep-Dic).
 
 ## Archivos generados en este run

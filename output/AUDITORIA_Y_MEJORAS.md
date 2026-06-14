@@ -11,7 +11,7 @@ Ejecutado por: auditoría asistida sobre branch main, commit `d785b1c`.
    - Grid search re-alineado al proxy `unified` (era `Tipo A`): **+0.010 AUC** sobre test.
    - `max_features=0.6` (sub-sampling de columnas por árbol) — pequeño pero consistente.
    - Pipeline permanente: `run_pipeline.py:step2_engineer` ahora usa `transform_with_warm_history`.
-4. **Mayor lift operativo** viene de re-alinear el proxy con tu hipótesis de fraude. Con un proxy "extendido" (refunds + velocidad + descuentos + bursts de usuario nuevo + montos extremadamente pequeños), el IF sube a **AUC=0.762, P@5%=0.597, EF=2.60x**.
+4. **Mayor lift operativo** viene de re-alinear el proxy con tu hipótesis de anomalías operativas. Con un proxy "extendido" (refunds + velocidad + descuentos + bursts de usuario nuevo + montos extremadamente pequeños), el IF sube a **AUC=0.762, P@5%=0.597, EF=2.60x**. *Caveat:* este proxy comparte features con el modelo y exhibe circularidad declarada — el AUC es de sensibilidad operacional, no de capacidad discriminativa independiente.
 
 ---
 
@@ -98,7 +98,7 @@ Las features ingenieradas (7 interacciones nuevas, todas derivadas de columnas e
 6. `very_small_amount_at_facility` (amount_facility_ratio < 0.05)
 7. `off_hours_high_value` (off_hours AND log_amount > 8)
 
-El proxy "extended" = `OR(Tipo A, Tipo C, Tipo D, new_user_burst, small_amount_extreme)`, alineado con los cuatro patrones que mencionaste como fraudulentos.
+El proxy "extended" = `OR(Tipo A, Tipo C, Tipo D, new_user_burst, small_amount_extreme)`, alineado con los cuatro patrones que mencionaste como operativamente anómalos.
 
 ---
 
@@ -136,7 +136,7 @@ El proxy "extended" = `OR(Tipo A, Tipo C, Tipo D, new_user_burst, small_amount_e
 El modelo no supervisado en su forma actual no puede. Tres alternativas:
 - **Semi-supervisado / PU-learning** usando refunds como positivos débiles. Romp el marco "puramente no supervisado" pero es defendible si se enmarca como "scoring híbrido".
 - **Cambiar el proxy a chargebacks reales** (si la plataforma los tiene en otra tabla — `bank_account_id` o disputas externas).
-- **Aceptar que el proxy de refund es ruidoso y no equivale a fraude**, y reformular el objetivo de la tesis como "detección de patrones operativos atípicos" en lugar de "detección de fraude".
+- **Aceptar que el proxy de refund es ruidoso y no equivale a fraude confirmado**, y mantener el objetivo de la tesis como "evaluación de la capacidad discriminativa para detección de anomalías transaccionales" en lugar de "detección de fraude" (alineado con título y plan V5).
 
 ---
 

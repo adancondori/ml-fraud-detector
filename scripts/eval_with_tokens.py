@@ -71,7 +71,7 @@ def build_extended_proxy(df):
     return (tipo_a | tipo_c | tipo_d | new_user_burst | small_amount).astype(np.int8)
 
 
-def build_pure_fraud_proxy(df):
+def build_proxy_anomalias_operativas(df):
     cols = df.columns
     card_test = (df["same_amount_count_1h"] >= 3).to_numpy() if "same_amount_count_1h" in cols else np.zeros(len(df), dtype=bool)
     new_burst = ((df["user_account_age_days"] < 14) & (df["user_txn_count_1h"] >= 3)).to_numpy()
@@ -79,6 +79,11 @@ def build_pure_fraud_proxy(df):
         (df["is_third_party_payment"] == 1) & (df["user_txn_count_1h"] >= 2)
     ).to_numpy() if "is_third_party_payment" in cols else np.zeros(len(df), dtype=bool)
     return (card_test | new_burst | third_party_burst).astype(np.int8)
+
+
+# Alias deprecado (PLAN_REFACTOR_TESIS sec. 9): nombre histórico para compatibilidad
+# con scripts existentes. Usar `build_proxy_anomalias_operativas` en código nuevo.
+build_pure_fraud_proxy = build_proxy_anomalias_operativas
 
 
 def build_extended_v2_proxy(df):

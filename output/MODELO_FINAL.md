@@ -2,6 +2,8 @@
 
 Documento de entrega del modelo de producción. Versión 1.0 — 2026-06-13.
 
+> **Nota de gobernanza (PLAN_REFACTOR_TESIS V5, Día 1):** el modelo IF-40 corresponde a la **Evaluación IV** del refactor de tesis (configuración operacional ampliada con `proxy_anomalias_operativas`/`pure_fraud` con circularidad parcial declarada), **no** al confirmatorio principal (Eval I = IF-29 + Tipo A, con AUC=0,508). Este documento describe el modelo de despliegue, no la validación confirmatoria de hipótesis. Ver `Tesis-Latex/New-Thesis/PLAN_REFACTOR_TESIS.md` sec. 4 y 11.
+
 ## Inventario de artifacts
 
 ```
@@ -91,11 +93,11 @@ Ver `output/results_validation_final.json` para CIs completos.
 
 **HE1 — Mann-Whitney U:** ver JSON. Esperado: p<0.001 en proxies con señal.
 
-**HE4 — IF vs LOF vs OC-SVM:** IF gana en unified, extended y pure_fraud. Empate aleatorio en tipo_a (todos ≈0.5).
+**HE4 — IF vs LOF vs OC-SVM:** bajo el feature set IF-40 con proxies con circularidad declarada (unified, extended, `pure_fraud`/proxy operativo estricto), IF supera en AUC y AP. Bajo el confirmatorio FS-clean-A-29 vs Tipo A (tesis Cap 3.4), **LOF supera a IF en las cuatro métricas**, por lo que HE4 no se respalda en el confirmatorio. Empate aleatorio en tipo_a bajo IF-40 (todos ≈0.5).
 
 ## Interpretación del score para negocio
 
-| Score percentil | Volumen test | Esperado en pure_fraud | Acción sugerida |
+| Score percentil | Volumen test | Esperado en proxy operativo estricto | Acción sugerida |
 |---|---:|---:|---|
 | Top 1% (≈25k txns/mes) | 1 cada 3 | 11.3× sobre base | Revisión manual obligatoria |
 | Top 5% (≈125k txns/mes) | 1 cada 5.4 | 6.1× sobre base | Revisión automatizada / flag |
@@ -106,8 +108,8 @@ Frecuencia de revisión y umbral exacto se ajustan según la capacidad operativa
 
 ## Limitaciones conocidas
 
-1. **El modelo NO detecta reembolsos operativos** (AUC vs Tipo A = 0.49). Si el caso de uso es "reducir refunds", este modelo no es apropiado — refunds aquí son mayoritariamente operativos, no fraude.
-2. **`pure_fraud` es una operacionalización**, no un ground truth. Las transacciones flageadas requieren revisión humana para confirmar fraude.
+1. **El modelo NO discrimina la condición proxy de reembolso** (AUC vs Tipo A = 0.49) bajo este feature set. Si el caso de uso es "reducir refunds", este modelo no es apropiado — los refunds en este dominio son mayoritariamente operativos, no señal de fraude.
+2. **`pure_fraud` es un proxy operativo estricto** (definido por COMBINACIONES de features, con **circularidad parcial declarada** contra las features del modelo), no un ground truth de fraude. Las transacciones flageadas requieren revisión humana (HITL — ver tesis Cap 3.9) para clasificarlas en categorías operativas.
 3. El modelo es **estable temporalmente en 2025** (validado Sep-Dic). Reentrenar trimestralmente si la base de usuarios o el mix de gateways cambia significativamente.
 
 ## Reentrenamiento

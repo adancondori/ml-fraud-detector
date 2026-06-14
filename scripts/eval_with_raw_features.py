@@ -191,8 +191,8 @@ def build_extended_proxy(df: pd.DataFrame) -> np.ndarray:
     return (tipo_a | tipo_c | tipo_d | new_user_burst | small_amount_extreme).astype(np.int8)
 
 
-def build_pure_fraud_proxy(df: pd.DataFrame) -> np.ndarray:
-    """Card-testing + gateway-hopping + new-user-burst (pure fraud signals)."""
+def build_proxy_anomalias_operativas(df: pd.DataFrame) -> np.ndarray:
+    """Proxy operativo estricto de anomalía: card-testing + new-user-burst + third-party-burst."""
     cols = df.columns
     card_test = (df["same_amount_count_1h"] >= 3).to_numpy() if "same_amount_count_1h" in cols else np.zeros(len(df), dtype=bool)
     new_burst = (
@@ -202,6 +202,11 @@ def build_pure_fraud_proxy(df: pd.DataFrame) -> np.ndarray:
         (df["is_third_party_payment"] == 1) & (df["user_txn_count_1h"] >= 2)
     ).to_numpy() if "is_third_party_payment" in cols else np.zeros(len(df), dtype=bool)
     return (card_test | new_burst | third_party_burst).astype(np.int8)
+
+
+# Alias deprecado (PLAN_REFACTOR_TESIS sec. 9): nombre histórico para compatibilidad
+# con scripts existentes. Usar `build_proxy_anomalias_operativas` en código nuevo.
+build_pure_fraud_proxy = build_proxy_anomalias_operativas
 
 
 def percentile_metrics(scores, y, pcts=(0.01, 0.02, 0.05, 0.10)):
@@ -292,7 +297,7 @@ def main():
         f"  Proxy rates (test): "
         f"unified={DataManager.assign_proxy_labels(df_test_feat, 'unified', settings).mean():.4f}  "
         f"tipo_a={DataManager.assign_proxy_labels(df_test_feat, 'tipo_a', settings).mean():.4f}  "
-        f"extended={y_ext_test.mean():.4f}  pure_fraud={y_pure_test.mean():.4f}"
+        f"extended={y_ext_test.mean():.4f}  anomalias_operativas={y_pure_test.mean():.4f}"
     )
 
     X_train = df_train_feat[ALL_FEATURES].to_numpy(dtype=np.float64)
