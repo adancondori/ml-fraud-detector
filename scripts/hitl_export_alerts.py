@@ -17,10 +17,18 @@ Pipeline:
 
 Usage:
     python scripts/hitl_export_alerts.py --top-pct 1 --out output/hitl/alertas.csv
-    python scripts/hitl_export_alerts.py --top-pct 5 --period sep-dic-2025 \
+    python scripts/hitl_export_alerts.py --top-pct 1 --period 2025-12 \
+        --out output/hitl/alertas_diciembre.csv  # filtra a diciembre 2025
+    python scripts/hitl_export_alerts.py --top-pct 5 \
         --features data/processed/test_features_enriched.parquet \
         --raw      data/processed/test_raw.parquet \
         --out      output/hitl/alertas_top5.csv
+
+The `--period` argument, when provided, filters the enriched parquet to rows whose
+`created_at` falls inside that period before scoring. Accepted formats:
+  YYYY        (e.g. 2025          → entire year)
+  YYYY-MM     (e.g. 2025-12       → that single month)
+  YYYY-MM-DD/YYYY-MM-DD (custom inclusive range)
 """
 from __future__ import annotations
 
@@ -79,15 +87,52 @@ def build_proxy_tipo_a(df: pd.DataFrame) -> np.ndarray:
     return df["status"].isin(["totally_refunded", "refunded_to_credit"]).astype(np.int8).to_numpy()
 
 
+def _resolve_period(period: str | None) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    if not period:
+        return None
+    if "/" in period:
+        start_s, end_s = period.split("/", 1)
+        start = pd.Timestamp(start_s)
+        end = pd.Timestamp(end_s) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    elif len(period) == 4:
+        start = pd.Timestamp(f"{period}-01-01")
+        end = pd.Timestamp(f"{int(period) + 1}-01-01") - pd.Timedelta(seconds=1)
+    elif len(period) == 7:
+        start = pd.Timestamp(period + "-01")
+        end = (start + pd.offsets.MonthEnd(0)).replace(hour=23, minute=59, second=59)
+    else:
+        raise ValueError(
+            f"Unsupported --period format: {period!r}. "
+            "Accepted: YYYY, YYYY-MM, YYYY-MM-DD/YYYY-MM-DD"
+        )
+    return start, end
+
+
 def export_alerts(
     features_path: Path,
     raw_path: Path,
     top_pct: float,
     out_path: Path,
+    period: str | None = None,
 ) -> pd.DataFrame:
     logger.info(f"Loading enriched features from {features_path}")
     df_feat = pd.read_parquet(features_path)
     logger.info(f"  {len(df_feat):,} rows × {len(df_feat.columns)} cols")
+
+    window = _resolve_period(period)
+    if window is not None:
+        start, end = window
+        if "created_at" not in df_feat.columns:
+            raise ValueError(
+                "Cannot filter by --period: enriched parquet has no `created_at` column"
+            )
+        created_at = pd.to_datetime(df_feat["created_at"])
+        mask = (created_at >= start) & (created_at <= end)
+        df_feat = df_feat.loc[mask].reset_index(drop=True)
+        logger.info(
+            f"Filtered by --period {period} ({start.date()}..{end.date()}): "
+            f"{len(df_feat):,} rows remain"
+        )
 
     logger.info("Scoring with IF-40 model")
     scorer = PaymentScorer()
@@ -138,8 +183,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Export top-K HITL alerts CSV")
     parser.add_argument("--top-pct", type=float, default=1.0,
                         help="Percentile cut-off for the top-K (default 1%%)")
-    parser.add_argument("--period", type=str, default="sep-dic-2025",
-                        help="Label only; the period is determined by the input parquet")
+    parser.add_argument("--period", type=str, default=None,
+                        help="Optional filter on created_at (YYYY, YYYY-MM, YYYY-MM-DD/YYYY-MM-DD)")
     parser.add_argument("--features", type=str,
                         default=str(DATA_DIR / "test_features_enriched.parquet"))
     parser.add_argument("--raw", type=str,
@@ -153,6 +198,7 @@ def main() -> None:
         raw_path=Path(args.raw),
         top_pct=args.top_pct,
         out_path=Path(args.out),
+        period=args.period,
     )
 
 

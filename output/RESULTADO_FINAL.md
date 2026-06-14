@@ -141,7 +141,7 @@ Defender el proxy operativo estricto de anomalía (internamente denominado `pure
 | HE1 (Mann-Whitney p < 0.05) | ✓ (n>200k positivos, ya pasaba) |
 | HE2 (AUC > 0.70 AND AP > base) | ✓ (0.841 > 0.70; AP=0.179 > 0.030) |
 | HE3 (top 5% > base) | ✓ (EF@5%=6.10×) |
-| HE4 (IF ≥ LOF, OC-SVM) | ✓ verificado en branch |
+| HE4 (IF ≥ LOF, OC-SVM) | ✓ bajo proxies con circularidad parcial declarada; ✗ bajo Tipo A confirmatorio (LOF supera IF en 4/4) |
 
 > **Aclaración (PLAN_REFACTOR_TESIS V5 sec. 11):** los criterios de HE1–HE4 se cumplen como **criterios análogos de desempeño** bajo este proxy operativo estricto con **circularidad parcial declarada**, **no** como validación independiente de las hipótesis confirmatorias. Bajo el confirmatorio académico (FS-clean-A-29 + Tipo A, Cap 3.4) las cuatro hipótesis **NO se respaldan**: AUC=0,508, AP=0,063, EF@5%=0,918, r_rb=0,016. Las dos lecturas no se mezclan.
 

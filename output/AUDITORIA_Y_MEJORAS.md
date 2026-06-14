@@ -3,6 +3,8 @@
 Fecha: 2026-06-13
 Ejecutado por: auditoría asistida sobre branch main, commit `d785b1c`.
 
+> **Nota de gobernanza (PLAN_REFACTOR_TESIS V5, Día 9):** este documento es **operativo, no académico**. Sus afirmaciones sobre lift por proxy alternativos (e.g. AUC=0,762 con proxy "extended") reflejan **sensibilidad operacional bajo proxies con circularidad parcial declarada**, no validación independiente de hipótesis. El cierre académico autoritativo vive en el Capítulo 3 sec. 3.4 (Evaluación I — confirmatorio FS-clean-A-29 vs Tipo A): **HE1–HE4 no se respaldan**; AUC=0,508, AP=0,063, EF@5%=0,918, r_rb=0,016. La extensión exploratoria del Cap 3 falló bajo Gate 3. Ver `Tesis-Latex/New-Thesis/PLAN_REFACTOR_TESIS.md` sec. 11.
+
 ## TL;DR
 
 1. **El AUC reportado (0.6299) está estructuralmente inflado** por features circularmente acopladas al proxy. El AUC honesto contra el único proxy parcialmente independiente (Tipo A = refunds) es **0.51 ≈ aleatorio**.
