@@ -137,6 +137,63 @@ def test_bootstrap_ci_lower_leq_mean_leq_upper(perfect_separation):
     assert result["lower"] <= result["mean"] <= result["upper"]
 
 
+def test_bootstrap_ci_backwards_compat(perfect_separation):
+    """Sin user_ids el dict NO debe contener `cluster_unit` (back-compat estricta)."""
+    scores, proxy = perfect_separation
+    from sklearn.metrics import roc_auc_score
+    result = bootstrap_ci(proxy, scores, roc_auc_score, n_iterations=100, random_seed=42)
+    assert "cluster_unit" not in result
+    assert "n_clusters_resampled" not in result
+    assert "method_used" not in result
+    assert set(result.keys()) == {"mean", "lower", "upper", "std", "n_iterations"}
+
+
+def test_bootstrap_ci_by_user_bounds():
+    """Con user_ids el CI clustered debe respetar lower <= mean <= upper y traer metadatos."""
+    rng = np.random.default_rng(0)
+    n_users = 200
+    txns_per_user = 5
+    n = n_users * txns_per_user
+    user_ids = np.repeat(np.arange(n_users), txns_per_user)
+    proxy = (rng.random(n) < 0.15).astype(np.int8)
+    scores = rng.random(n) + 0.2 * proxy  # leve señal
+    from sklearn.metrics import roc_auc_score
+    res = bootstrap_ci(
+        proxy, scores, roc_auc_score,
+        n_iterations=200, random_seed=42,
+        user_ids=user_ids, method="weighted",
+    )
+    assert res["lower"] <= res["mean"] <= res["upper"]
+    assert res["cluster_unit"] == "user"
+    assert res["n_clusters_resampled"] == n_users
+    assert res["method_used"] == "weighted"
+
+
+def test_bootstrap_ci_weighted_vs_concatenate_close():
+    """Las rutas weighted y concatenate deben converger para AUC dentro de ±0.005."""
+    rng = np.random.default_rng(0)
+    n_users = 300
+    txns_per_user = 5
+    n = n_users * txns_per_user
+    user_ids = np.repeat(np.arange(n_users), txns_per_user)
+    proxy = (rng.random(n) < 0.1).astype(np.int8)
+    scores = rng.random(n) + 0.3 * proxy
+    from sklearn.metrics import roc_auc_score
+    res_w = bootstrap_ci(
+        proxy, scores, roc_auc_score,
+        n_iterations=500, random_seed=42,
+        user_ids=user_ids, method="weighted",
+    )
+    res_c = bootstrap_ci(
+        proxy, scores, roc_auc_score,
+        n_iterations=500, random_seed=42,
+        user_ids=user_ids, method="concatenate",
+    )
+    assert abs(res_w["mean"] - res_c["mean"]) < 0.005
+    # ambos identifican el mismo cluster_unit
+    assert res_w["cluster_unit"] == res_c["cluster_unit"] == "user"
+
+
 # --- Holm-Bonferroni ---
 
 

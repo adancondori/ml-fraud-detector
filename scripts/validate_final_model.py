@@ -32,6 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from config.config import settings  # noqa: E402
 from fraud_detector.data.loader import DataManager  # noqa: E402
+from fraud_detector.evaluation.metrics import bootstrap_ci as _bootstrap_ci  # noqa: E402
 from fraud_detector.features.engineering import FEATURE_NAMES  # noqa: E402
 from fraud_detector.utils.logger import logger  # noqa: E402
 
@@ -188,6 +189,46 @@ def main():
             f"[{bootstrap_ci[pname]['ap_p2.5']:.4f}, {bootstrap_ci[pname]['ap_p97.5']:.4f}]"
         )
 
+    # ───────── 2b. Clustered bootstrap CI BY USER (seed=42) ─────────
+    # Defensa preventiva ante dependencia serial intra-usuario inducida por
+    # features rolling (user_txn_count_1h, etc.). Ruta `sample_weight` para AUC/AP.
+    logger.info("")
+    logger.info(
+        f"─── 2b. BOOTSTRAP 95% CI BY USER (clustered, {N_BOOTSTRAP} iter, seed=42) ───"
+    )
+    user_ids_test = df_test["user_id"].to_numpy()
+    n_users_test = int(np.unique(user_ids_test).size)
+    logger.info(f"  n_users={n_users_test:,}  (n_txns={len(user_ids_test):,})")
+    bootstrap_ci_by_user = {}
+    for pname, y in proxies.items():
+        auc_res = _bootstrap_ci(
+            y, last_scores, roc_auc_score,
+            n_iterations=N_BOOTSTRAP, ci=0.95, random_seed=42,
+            user_ids=user_ids_test, method="weighted",
+        )
+        ap_res = _bootstrap_ci(
+            y, last_scores, average_precision_score,
+            n_iterations=N_BOOTSTRAP, ci=0.95, random_seed=42,
+            user_ids=user_ids_test, method="weighted",
+        )
+        bootstrap_ci_by_user[pname] = {
+            "auc_mean":  auc_res["mean"],
+            "auc_p2.5":  auc_res["lower"],
+            "auc_p97.5": auc_res["upper"],
+            "ap_mean":   ap_res["mean"],
+            "ap_p2.5":   ap_res["lower"],
+            "ap_p97.5":  ap_res["upper"],
+            "n_iterations": N_BOOTSTRAP,
+            "n_users_resampled": n_users_test,
+            "method_used": auc_res.get("method_used", "weighted"),
+        }
+        logger.info(
+            f"  {pname:12s} AUC = {bootstrap_ci_by_user[pname]['auc_mean']:.4f} "
+            f"[{bootstrap_ci_by_user[pname]['auc_p2.5']:.4f}, {bootstrap_ci_by_user[pname]['auc_p97.5']:.4f}]   "
+            f"AP = {bootstrap_ci_by_user[pname]['ap_mean']:.4f} "
+            f"[{bootstrap_ci_by_user[pname]['ap_p2.5']:.4f}, {bootstrap_ci_by_user[pname]['ap_p97.5']:.4f}]"
+        )
+
     # ───────── 3. Temporal stability (monthly) ─────────
     logger.info("")
     logger.info("─── 3. TEMPORAL STABILITY (monthly AUC, seed=42) ───")
@@ -268,6 +309,7 @@ def main():
         },
         "multi_seed": ms_summary,
         "bootstrap_ci_95pct": bootstrap_ci,
+        "bootstrap_ci_95pct_by_user": bootstrap_ci_by_user,
         "temporal_stability": temporal,
         "he1_mann_whitney": he1,
         "seeds_used": SEEDS,
