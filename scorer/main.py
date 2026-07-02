@@ -3,9 +3,9 @@
 Lifespan loads SingleTransactionScorer and ClickHouse client once at startup
 and stores them in the shared _state dict from dependencies.py.
 """
+
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,7 +14,9 @@ from fastapi import FastAPI
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from fraud_detector.scoring.scorer import SingleTransactionScorer
+from scorer.artifact_loader import load_artifacts
 from scorer import dependencies as _deps
+from scorer.batch.scorer import DEFAULT_ANOMALY_SCORES_TABLE, ch_fingerprint
 
 
 class ScorerSettings(BaseSettings):
@@ -23,26 +25,34 @@ class ScorerSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     model_dir: Path = Path("output/models")
+
+    # READ target — production ClickHouse (read-only). Used for cursor
+    # resolution, payment fetch, batch context and single-score context.
     clickhouse_host: str = "localhost"
     clickhouse_port: int = 8123
     clickhouse_user: str = "default"
     clickhouse_password: str = ""
     clickhouse_database: str = "pbp_productionDB_optimized"
-    clickhouse_secure: bool = False
+    clickhouse_secure: bool = True
+
+    # WRITE target — local ClickHouse where anomaly_scores are inserted.
+    # Defaults point at the local docker service so the guardrail's
+    # local-host check passes out of the box; never default to production.
+    anomaly_scores_ch_host: str = "clickhouse"
+    anomaly_scores_ch_port: int = 8123
+    anomaly_scores_ch_user: str = "default"
+    anomaly_scores_ch_password: str = ""
+    anomaly_scores_ch_database: str = "pbp_productionDB_optimized"
+    anomaly_scores_ch_secure: bool = False
+
+    # Destination table for the INSERT. Local reuses the prod DB *name*.
+    anomaly_scores_table: str = DEFAULT_ANOMALY_SCORES_TABLE
+
+    # Explicit, off-by-default bypass for the non-local WRITE host guardrail.
+    allow_nonlocal_anomaly_score_writes: bool = False
 
 
 settings = ScorerSettings()
-
-
-def _load_model_version(model_dir: Path) -> str:
-    """Read model version from thresholds.json, default to 'IF-31-v1'."""
-    thresholds_path = model_dir / "thresholds.json"
-    try:
-        with open(thresholds_path) as f:
-            data = json.load(f)
-        return data.get("model_version", "IF-31-v1")
-    except Exception:
-        return "IF-31-v1"
 
 
 @asynccontextmanager
@@ -50,41 +60,75 @@ async def lifespan(app: FastAPI):
     """Load model and ClickHouse client once at startup; clean up on shutdown."""
     model_dir = settings.model_dir
 
-    # Load scorer
-    scorer = SingleTransactionScorer(
-        model_path=str(model_dir / "isolation_forest.joblib"),
-        scaler_path=str(model_dir / "scaler.joblib"),
-        feature_engineer_path=str(model_dir / "feature_engineer.joblib"),
-        thresholds_path=str(model_dir / "thresholds.json"),
-        ch_connector=None,  # context queries use the shared client below
-    )
+    artifacts = load_artifacts(model_dir)
 
-    # Load ClickHouse client
-    ch_client = clickhouse_connect.get_client(
+    # READ client — production ClickHouse (read-only).
+    # autogenerate_session_id=False: avoids a server-side session lock so the
+    # /health probe ("SELECT 1") can run concurrently with a long batch on the
+    # same client without raising "concurrent queries within the same session".
+    read_ch_client = clickhouse_connect.get_client(
         host=settings.clickhouse_host,
         port=settings.clickhouse_port,
         username=settings.clickhouse_user,
         password=settings.clickhouse_password,
         database=settings.clickhouse_database,
         secure=settings.clickhouse_secure,
+        autogenerate_session_id=False,
     )
 
-    model_version = _load_model_version(model_dir)
+    # WRITE client — local ClickHouse for anomaly_scores INSERT.
+    write_ch_client = clickhouse_connect.get_client(
+        host=settings.anomaly_scores_ch_host,
+        port=settings.anomaly_scores_ch_port,
+        username=settings.anomaly_scores_ch_user,
+        password=settings.anomaly_scores_ch_password,
+        database=settings.anomaly_scores_ch_database,
+        secure=settings.anomaly_scores_ch_secure,
+        autogenerate_session_id=False,
+    )
+
+    scorer = SingleTransactionScorer(
+        feature_engineer_path=str(model_dir / "feature_engineer.joblib"),
+        ch_connector=read_ch_client,
+        artifacts=artifacts,
+    )
 
     # Populate shared state
     _deps._state["scorer"] = scorer
-    _deps._state["ch_client"] = ch_client
+    _deps._state["read_ch_client"] = read_ch_client
+    _deps._state["write_ch_client"] = write_ch_client
+    _deps._state["ch_client"] = read_ch_client  # backward-compat alias (READ)
     _deps._state["model_loaded"] = True
-    _deps._state["model_version"] = model_version
+    _deps._state["model_version"] = scorer._model_version
     _deps._state["last_batch_at"] = None
+
+    # Guardrail metadata consumed by the /score/batch route.
+    _deps._state["anomaly_scores_table"] = settings.anomaly_scores_table
+    _deps._state["read_fingerprint"] = ch_fingerprint(
+        settings.clickhouse_host,
+        settings.clickhouse_port,
+        settings.clickhouse_database,
+        settings.clickhouse_secure,
+        settings.clickhouse_user,
+    )
+    _deps._state["write_fingerprint"] = ch_fingerprint(
+        settings.anomaly_scores_ch_host,
+        settings.anomaly_scores_ch_port,
+        settings.anomaly_scores_ch_database,
+        settings.anomaly_scores_ch_secure,
+        settings.anomaly_scores_ch_user,
+    )
+    _deps._state["write_host"] = settings.anomaly_scores_ch_host
+    _deps._state["allow_nonlocal_write"] = settings.allow_nonlocal_anomaly_score_writes
 
     yield
 
-    # Shutdown: close ClickHouse connection and clear state
-    try:
-        ch_client.close()
-    except Exception:
-        pass
+    # Shutdown: close both ClickHouse connections and clear state
+    for _client in (read_ch_client, write_ch_client):
+        try:
+            _client.close()
+        except Exception:
+            pass
     _deps._state.clear()
 
 

@@ -11,6 +11,7 @@ The code accepts two exchange-rate layouts:
 Internally both formats are converted into the same lookup:
 `(year_month, currency) -> rate_to_usd`.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -45,6 +46,26 @@ _FALLBACK_RATES: Dict[str, float] = {
 }
 
 
+def fallback_rate(currency: str | None) -> float:
+    """Return the static fallback USD conversion rate for a currency."""
+    currency = (currency or "USD").upper()
+    return _FALLBACK_RATES.get(currency, 1.0)
+
+
+def normalize_amount_value(amount: float | int | None, currency: str | None) -> float:
+    """Normalize a single local-currency amount to USD with fallback rates."""
+    return float(amount or 0.0) * fallback_rate(currency)
+
+
+def clickhouse_rate_case(column: str = "currency") -> str:
+    """Build a ClickHouse multiIf expression matching the fallback rate table."""
+    parts: list[str] = []
+    for currency, rate in sorted(_FALLBACK_RATES.items()):
+        parts.extend([f"upper({column}) = '{currency}'", f"{rate:.12f}"])
+    parts.append("1.0")
+    return f"multiIf({', '.join(parts)})"
+
+
 class CurrencyNormalizer:
     """Normalize local-currency amounts into USD."""
 
@@ -63,19 +84,14 @@ class CurrencyNormalizer:
         by_currency: Dict[str, list[float]] = {}
         for (_, currency), rate in self._rate_lookup.items():
             by_currency.setdefault(currency, []).append(float(rate))
-        return {
-            currency: float(np.median(rates))
-            for currency, rates in by_currency.items()
-        }
+        return {currency: float(np.median(rates)) for currency, rates in by_currency.items()}
 
     @classmethod
     def from_csv(cls, path: str | Path) -> "CurrencyNormalizer":
         """Load a normalizer from a CSV export."""
         csv_path = Path(path)
         if not csv_path.exists():
-            logger.warning(
-                f"Exchange-rate file not found at {csv_path}; using fallback rates."
-            )
+            logger.warning(f"Exchange-rate file not found at {csv_path}; using fallback rates.")
             return cls.from_fallback()
 
         df = pd.read_csv(csv_path)
@@ -85,10 +101,7 @@ class CurrencyNormalizer:
 
     @classmethod
     def from_fallback(cls) -> "CurrencyNormalizer":
-        rate_lookup = {
-            ("fallback", currency): rate
-            for currency, rate in _FALLBACK_RATES.items()
-        }
+        rate_lookup = {("fallback", currency): rate for currency, rate in _FALLBACK_RATES.items()}
         return cls(rate_lookup)
 
     @staticmethod

@@ -1,9 +1,9 @@
 """Threshold classifier — converts continuous anomaly score to binary decision + risk level."""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -28,6 +28,9 @@ class ScoringResult:
     risk_level: str
     percentile: float
     factors: List[dict] = field(default_factory=list)
+    model_version: str = "IF-31-v1"
+    feature_version: str = "base-31"
+    threshold_version: str = "v1"
 
 
 class ThresholdClassifier:
@@ -37,11 +40,17 @@ class ThresholdClassifier:
     Percentiles are pre-computed from the test set score distribution.
     """
 
-    def __init__(self, thresholds_path: str = "output/models/thresholds.json"):
-        with open(thresholds_path) as f:
-            config = json.load(f)
+    def __init__(
+        self,
+        thresholds_path: str = "output/models/thresholds.json",
+        config: dict | None = None,
+    ):
+        if config is None:
+            with open(thresholds_path) as f:
+                config = json.load(f)
         self._threshold = config["binary_threshold"]
         self._score_percentiles = np.array(config["score_percentiles"], dtype=np.float32)
+        self._threshold_version = config.get("threshold_version", "v1")
         logger.info(
             f"ThresholdClassifier loaded: threshold={self._threshold:.6f}, "
             f"percentile_bins={len(self._score_percentiles)}"

@@ -4,6 +4,7 @@ Uses a VALUES JOIN strategy to execute exactly 6 ClickHouse queries regardless
 of batch size (not 6xN). Suitable for batch scoring pipelines with thousands
 of payments per cursor run.
 """
+
 from __future__ import annotations
 
 import time
@@ -13,9 +14,12 @@ from typing import Dict, List, Tuple
 from loguru import logger
 
 from fraud_detector.scoring.context import UserContext
+from fraud_detector.utils.currency import clickhouse_rate_case
 
 # Type alias for the context key
 ContextKey = Tuple[int, int]  # (user_id, facility_id)
+P_AMOUNT_USD_SQL = f"(p.reservation_paid_out * {clickhouse_rate_case('p.currency')})"
+P_DISCOUNT_USD_SQL = f"(p.discount * {clickhouse_rate_case('p.currency')})"
 
 
 class BatchContextProvider:
@@ -60,15 +64,14 @@ class BatchContextProvider:
             ts = p["created_at"]
             if not isinstance(ts, datetime):
                 import pandas as pd
+
                 ts = pd.Timestamp(ts).to_pydatetime()
             key = (uid, fid)
             if key not in pair_timestamps or ts > pair_timestamps[key]:
                 pair_timestamps[key] = ts
 
         # Initialize result dict with default UserContext for all pairs
-        result: Dict[ContextKey, UserContext] = {
-            key: UserContext() for key in pair_timestamps
-        }
+        result: Dict[ContextKey, UserContext] = {key: UserContext() for key in pair_timestamps}
 
         # Process in chunks to stay under ClickHouse max_query_size
         pairs_list = list(pair_timestamps.items())  # [((uid, fid), ts), ...]
@@ -79,7 +82,7 @@ class BatchContextProvider:
         )
 
         for chunk_start in range(0, total_pairs, self._chunk_size):
-            chunk = pairs_list[chunk_start: chunk_start + self._chunk_size]
+            chunk = pairs_list[chunk_start : chunk_start + self._chunk_size]
             chunk_result = self._query_chunk(chunk)
             result.update(chunk_result)
 
@@ -110,9 +113,7 @@ class BatchContextProvider:
     ) -> Dict[ContextKey, UserContext]:
         """Run all 6 queries for one chunk of pairs, return populated context dict."""
         # Initialize results for this chunk
-        chunk_result: Dict[ContextKey, UserContext] = {
-            key: UserContext() for key, _ in chunk
-        }
+        chunk_result: Dict[ContextKey, UserContext] = {key: UserContext() for key, _ in chunk}
         values_str = self._build_values_str(chunk)
 
         self._query_velocity(values_str, chunk_result)
@@ -128,9 +129,7 @@ class BatchContextProvider:
     # Query 1: Velocity (Group C)
     # ------------------------------------------------------------------
 
-    def _query_velocity(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_velocity(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """txn_count_1h, txn_count_24h, amount_24h, last_txn_at."""
         sql = f"""
         SELECT
@@ -145,7 +144,7 @@ class BatchContextProvider:
                 AND p.created_at < v.ts
             ) AS txn_count_24h,
             sumIf(
-                p.reservation_paid_out,
+                {P_AMOUNT_USD_SQL},
                 p.created_at >= v.ts - INTERVAL 24 HOUR
                 AND p.created_at < v.ts
             ) AS amount_24h,
@@ -179,9 +178,7 @@ class BatchContextProvider:
     # Query 2: Behavior (Group D)
     # ------------------------------------------------------------------
 
-    def _query_behavior(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_behavior(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """distinct_facilities_30d, distinct_methods, reversal_ratio_30d,
         discount_ratio_30d, txn_count_30d."""
         sql = f"""
@@ -192,7 +189,7 @@ class BatchContextProvider:
             count(DISTINCT p.payment_method) AS distinct_methods,
             countIf(p.status IN ('totally_refunded', 'refunded_to_credit'))
                 * 1.0 / greatest(count(), 1) AS reversal_ratio_30d,
-            sumIf(p.discount, 1=1) / greatest(sumIf(p.reservation_paid_out, 1=1), 0.01)
+            sumIf({P_DISCOUNT_USD_SQL}, 1=1) / greatest(sumIf({P_AMOUNT_USD_SQL}, 1=1), 0.01)
                 AS discount_ratio_30d,
             count() AS txn_count_30d
         FROM pbp_productionDB_optimized.payments FINAL AS p
@@ -227,17 +224,15 @@ class BatchContextProvider:
     # Query 3: Credit/Flow (Group F)
     # ------------------------------------------------------------------
 
-    def _query_credit(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_credit(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """debit_count_30d, debit_amount_30d, prepaid_spend_30d."""
         sql = f"""
         SELECT
             v.user_id,
             v.facility_id,
             countIf(p.category = 'debit') AS debit_count_30d,
-            sumIf(p.reservation_paid_out, p.category = 'debit') AS debit_amount_30d,
-            sumIf(p.reservation_paid_out, p.payment_method = 'prepaid') AS prepaid_spend_30d
+            sumIf({P_AMOUNT_USD_SQL}, p.category = 'debit') AS debit_amount_30d,
+            sumIf({P_AMOUNT_USD_SQL}, p.payment_method = 'prepaid') AS prepaid_spend_30d
         FROM pbp_productionDB_optimized.payments FINAL AS p
         INNER JOIN (
             SELECT * FROM VALUES(
@@ -267,9 +262,7 @@ class BatchContextProvider:
     # Query 4: Diversity (Group H)
     # ------------------------------------------------------------------
 
-    def _query_diversity(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_diversity(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """categories_30d (groupArray), reversal_count_30d, merchandise_ratio_30d."""
         sql = f"""
         SELECT
@@ -310,16 +303,11 @@ class BatchContextProvider:
     # Query 5: User info
     # ------------------------------------------------------------------
 
-    def _query_user_info(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_user_info(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """user_created_at from users table (join on user_id only)."""
         # Deduplicate user_ids for this query — no facility_id needed
         # Build a VALUES clause with only user_ids to avoid duplicates across facilities
-        unique_users_str = ", ".join(
-            f"({int(uid)})"
-            for uid in {key[0] for key in ctx_map}
-        )
+        unique_users_str = ", ".join(f"({int(uid)})" for uid in {key[0] for key in ctx_map})
         sql = f"""
         SELECT
             u.id AS user_id,
@@ -340,7 +328,7 @@ class BatchContextProvider:
             for row in result.result_rows:
                 user_created[int(row[0])] = row[1]
             # Apply to all (user_id, facility_id) pairs for this user
-            for (uid, fid) in ctx_map:
+            for uid, fid in ctx_map:
                 if uid in user_created:
                     ctx_map[(uid, fid)].user_created_at = user_created[uid]
         except Exception as exc:
@@ -351,9 +339,7 @@ class BatchContextProvider:
     # Query 6: Role
     # ------------------------------------------------------------------
 
-    def _query_role(
-        self, values_str: str, ctx_map: Dict[ContextKey, UserContext]
-    ) -> None:
+    def _query_role(self, values_str: str, ctx_map: Dict[ContextKey, UserContext]) -> None:
         """role from facilities_users table, keyed by (user_id, facility_id)."""
         sql = f"""
         SELECT

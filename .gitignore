@@ -336,6 +336,8 @@ gcloud/
 *.json
 !requirements*.json
 !package.json
+!output/models/model_metadata.json
+!output/models/thresholds_v2.json
 
 # Azure
 .azure/

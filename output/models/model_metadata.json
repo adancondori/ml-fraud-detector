@@ -1,0 +1,12 @@
+{
+  "model_version": "IF-40-v1",
+  "feature_version": "enriched-40",
+  "score_function": "decision_function",
+  "threshold_version": "v2",
+  "artifact_files": {
+    "model": "isolation_forest_final.joblib",
+    "scaler": "scaler_final.joblib",
+    "feature_list": "final_feature_list.json",
+    "thresholds": "thresholds_v2.json"
+  }
+}

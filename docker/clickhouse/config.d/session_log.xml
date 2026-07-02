@@ -1,0 +1,6 @@
+<clickhouse>
+    <session_log>
+        <database>system</database>
+        <table>session_log</table>
+    </session_log>
+</clickhouse>

@@ -1,4 +1,5 @@
 """Scoring endpoints: POST /score (single) and POST /score/batch."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,7 +9,8 @@ from loguru import logger
 
 from fraud_detector.scoring.scorer import SingleTransactionScorer
 from scorer import dependencies as _deps
-from scorer.dependencies import get_ch_client, get_scorer
+from scorer.dependencies import get_read_ch_client, get_scorer, get_write_ch_client
+from scorer.batch.scorer import DEFAULT_ANOMALY_SCORES_TABLE
 from scorer.schemas import (
     BatchScoreRequest,
     BatchScoreResponse,
@@ -43,6 +45,9 @@ def score_single(
         risk_level=result.risk_level,
         is_anomaly=result.is_anomaly,
         factors=[FactorItem(**f) for f in result.factors],
+        model_version=result.model_version,
+        feature_version=result.feature_version,
+        threshold_version=result.threshold_version,
     )
 
 
@@ -50,17 +55,31 @@ def score_single(
 def score_batch(
     request: BatchScoreRequest,
     scorer: SingleTransactionScorer = Depends(get_scorer),
-    ch_client=Depends(get_ch_client),
+    read_ch_client=Depends(get_read_ch_client),
+    write_ch_client=Depends(get_write_ch_client),
 ) -> BatchScoreResponse:
     """Trigger a batch scoring run from a cursor datetime.
 
-    Creates a BatchScorer on every call so the scorer + ch_client injected
-    by DI are always the current (potentially reloaded) instances.
+    Creates a BatchScorer on every call so the scorer + clients injected by DI
+    are always the current (potentially reloaded) instances. READ runs against
+    production (read-only); the anomaly_scores INSERT runs against the local
+    WRITE client, guarded by metadata resolved at startup.
     FastAPI runs sync def in a threadpool — correct for CPU-bound work.
     """
     logger.info(f"POST /score/batch — cursor={request.cursor.isoformat()}")
 
-    batch_scorer = BatchScorer(scorer=scorer, ch_client=ch_client)
+    batch_scorer = BatchScorer(
+        scorer=scorer,
+        read_ch_client=read_ch_client,
+        write_ch_client=write_ch_client,
+        anomaly_scores_table=_deps._state.get(
+            "anomaly_scores_table", DEFAULT_ANOMALY_SCORES_TABLE
+        ),
+        read_fingerprint=_deps._state.get("read_fingerprint"),
+        write_fingerprint=_deps._state.get("write_fingerprint"),
+        write_host=_deps._state.get("write_host"),
+        allow_nonlocal_write=_deps._state.get("allow_nonlocal_write", False),
+    )
     result = batch_scorer.score_batch(cursor=request.cursor)
 
     _deps._state["last_batch_at"] = datetime.utcnow()

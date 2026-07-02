@@ -79,6 +79,36 @@ La suite actual valida:
 - entrenamiento no supervisado
 - métricas de evaluación
 
+## Servicio de scoring (FastAPI)
+
+El paquete `scorer/` expone un servicio FastAPI (`scorer.main:app`) con endpoints
+`/api/v1/health`, `/api/v1/model/info`, `/api/v1/model/reload`, `/api/v1/score` y
+`/api/v1/score/batch`.
+
+### Separación READ (prod) / WRITE (local)
+
+El batch scoring usa **dos clientes ClickHouse independientes** para que ninguna
+escritura toque producción:
+
+- **READ** (`CLICKHOUSE_*`): cliente read-only de producción. Resuelve el cursor,
+  hace el fetch de `payments` y construye el contexto del batch (6 queries).
+- **WRITE** (`ANOMALY_SCORES_CH_*`): cliente local donde se insertan los
+  `anomaly_scores`. El destino del INSERT lo define `ANOMALY_SCORES_TABLE`.
+
+Antes de cada INSERT, un **guardrail** (`assert_write_target_is_safe`) aborta si:
+
+1. el fingerprint WRITE (`host, port, database, secure, user`) coincide con el de
+   READ — evita escribir sobre el servidor de producción; o
+2. el host WRITE no es local (`clickhouse`, `localhost`, `127.0.0.1`) y no se
+   activó el bypass explícito `ALLOW_NONLOCAL_ANOMALY_SCORE_WRITES=true`.
+
+`/api/v1/health` reporta `clickhouse_connected = read_ok AND write_ok`.
+
+Variables de entorno: ver `.env.example` (READ, WRITE, tabla y bypass). Para la
+corrida local, READ apunta a producción read-only y WRITE al ClickHouse del
+`docker-compose.yml`. El flujo end-to-end reproducible se documenta en
+`docs/HOWTO-anomaly-local.md`.
+
 ## Fuente de verdad
 
 El contrato metodológico y operativo vive en:

@@ -21,9 +21,22 @@ def get_scorer() -> SingleTransactionScorer:
     return scorer
 
 
-def get_ch_client():
-    """Return the ClickHouse client or raise 503."""
-    client = _state.get("ch_client")
+def get_read_ch_client():
+    """Return the READ ClickHouse client (prod read-only) or raise 503."""
+    client = _state.get("read_ch_client", _state.get("ch_client"))
     if client is None:
-        raise HTTPException(status_code=503, detail="ClickHouse not connected")
+        raise HTTPException(status_code=503, detail="ClickHouse (read) not connected")
     return client
+
+
+def get_write_ch_client():
+    """Return the WRITE ClickHouse client (local anomaly_scores) or raise 503."""
+    client = _state.get("write_ch_client")
+    if client is None:
+        raise HTTPException(status_code=503, detail="ClickHouse (write) not connected")
+    return client
+
+
+def get_ch_client():
+    """Backward-compatible alias that returns the READ ClickHouse client."""
+    return get_read_ch_client()

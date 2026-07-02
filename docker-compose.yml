@@ -2,12 +2,18 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: clickhouse
+    # Bind published ports to loopback only. On Docker Desktop (Mac) this makes
+    # host->container connections appear as loopback instead of the host's WAN
+    # IP, so the local default user's loopback/private-network ACL admits the
+    # host Rails app without widening access to public addresses.
     ports:
-      - '8123:8123'
-      - '9000:9000'
+      - '127.0.0.1:8123:8123'
+      - '127.0.0.1:9000:9000'
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./docker/clickhouse/init:/docker-entrypoint-initdb.d
+      # LOCAL-only: allow the passwordless default user from docker/host networks.
+      - ./docker/clickhouse/users.d/allow-local-networks.xml:/etc/clickhouse-server/users.d/allow-local-networks.xml:ro
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
@@ -24,9 +30,22 @@ services:
     working_dir: /app
     volumes:
       - .:/app:delegated
+    # READ target (production read-only) comes from .env: CLICKHOUSE_*.
+    env_file:
+      - .env
     environment:
       MODEL_DIR: /app/output/models
       PYTHONPATH: /app/src
+      # WRITE target -> local ClickHouse service on pbc-network. These override
+      # any ANOMALY_SCORES_CH_* in .env so anomaly_scores writes always stay local.
+      ANOMALY_SCORES_CH_HOST: clickhouse
+      ANOMALY_SCORES_CH_PORT: 8123
+      ANOMALY_SCORES_CH_SECURE: "false"
+      ANOMALY_SCORES_CH_USER: default
+      ANOMALY_SCORES_CH_PASSWORD: ""
+      ANOMALY_SCORES_CH_DATABASE: pbp_productionDB_optimized
+      ANOMALY_SCORES_TABLE: pbp_productionDB_optimized.anomaly_scores
+      SCORING_MODE: shadow
     depends_on:
       clickhouse:
         condition: service_healthy

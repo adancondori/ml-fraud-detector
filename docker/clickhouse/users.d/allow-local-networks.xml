@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!--
+  LOCAL-ONLY override. The official ClickHouse image restricts the passwordless
+  `default` user to loopback (::1, 127.0.0.1). For this local integration run the
+  scorer (docker network) and the platform Rails app (host, via the published
+  port / docker gateway) must reach ClickHouse, so `default` is also allowed from
+  private (RFC1918 / docker) networks. This widens access only on the LOCAL
+  ClickHouse — never use this on a public/production server.
+-->
+<clickhouse>
+  <users>
+    <default>
+      <networks replace="replace">
+        <!-- Docker Desktop presents host->published-port connections as the
+             IPv4-mapped loopback ::ffff:127.0.0.1; ClickHouse turns a bare
+             127.0.0.1 into the 'localhost' host_name (reverse-DNS based), which
+             does NOT match the mapped form. Allow that exact mapped address so
+             the host Rails app can read the local ClickHouse. Scope stays
+             loopback + docker/private nets — never public. -->
+        <ip>::ffff:127.0.0.1</ip>
+        <ip>::1/128</ip>
+        <ip>127.0.0.1</ip>
+        <ip>10.0.0.0/8</ip>
+        <ip>172.16.0.0/12</ip>
+        <ip>192.168.0.0/16</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
