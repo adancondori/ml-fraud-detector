@@ -179,6 +179,25 @@ class DataManager:
         sql_path = self._settings.manifests_dir / "query_snapshot.sql"
         sql_path.write_text(query)
 
+    @staticmethod
+    def _sanitize_currency(series: pd.Series) -> pd.Series:
+        """Normalize a currency Series: fillna, uppercase, and replace EMPTY/'' with USD.
+
+        This is a preventive guard for future ClickHouse extractions where
+        currency can arrive as 'EMPTY' (currency.utils.fallback_rate returns 1.0
+        for unknown codes, which would silently corrupt log_amount and
+        amount_usd_ratio without this fix).
+
+        Returns the sanitized series.  Logs a warning with the row count when
+        any EMPTY/'' values are replaced (expected count: 0 in current parquets).
+        """
+        normalized = series.fillna("USD").astype(str).str.upper()
+        empty_mask = normalized.isin(["EMPTY", ""])
+        n_empty = int(empty_mask.sum())
+        if n_empty > 0:
+            logger.warning(f"Sanitized {n_empty} rows with currency EMPTY/'' -> USD")
+        return normalized.replace({"EMPTY": "USD", "": "USD"})
+
     def _postprocess_extraction(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize schema and monetary values after extraction."""
         out = df.copy()
@@ -201,14 +220,7 @@ class DataManager:
         out["user_role"] = out.get("user_role", "player").fillna("player").astype(str).replace("", "player")
 
         if "currency" in out.columns:
-            _cur = out["currency"].fillna("USD").astype(str).str.upper()
-            _empty_mask = _cur.isin(["EMPTY", ""])
-            _n_empty = int(_empty_mask.sum())
-            if _n_empty > 0:
-                logger.warning(
-                    f"Sanitized {_n_empty} rows with currency EMPTY/'' -> USD"
-                )
-            out["currency"] = _cur.replace({"EMPTY": "USD", "": "USD"})
+            out["currency"] = DataManager._sanitize_currency(out["currency"])
             normalizer = self._get_normalizer()
             out = normalizer.normalize(
                 out,
