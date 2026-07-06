@@ -1,4 +1,4 @@
-"""Offline retraining: IsolationForest sobre FS-frame-v1 (31 features).
+"""Offline retraining: IsolationForest sobre FS-frame-v1 (30 features).
 
 Receta congelada:
   IsolationForest(n_estimators=200, max_samples=512, max_features=0.6,
@@ -125,14 +125,13 @@ def _build_facility_lookup(stats: dict) -> tuple[np.ndarray, np.ndarray, np.ndar
 
 
 def add_frame_features_from_artifact(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
-    """Añade las 31 columnas de FRAME_V1_FEATURE_NAMES al DataFrame (vectorizado).
+    """Añade las 30 columnas de FRAME_V1_FEATURE_NAMES al DataFrame (vectorizado).
 
     Aritmética IDÉNTICA a FrameV1FeatureCalculator._compute_frame_features:
       - Lookup facility: facility → currency → global (según mean>0 en artefacto)
       - iqr_guarded del artefacto (NO iqr+1e-6 del prototipo)
       - log_amount_fac = log1p(amount / (fmean + 0.01))
       - amount_facility_ratio = amount / (fmean + 0.01)
-      - amount_fac_z = (amount - facility_median) / iqr_guarded
       - user_amount_24h_fac = user_amount_24h / (fmean + 0.01)
       - user_debit_amount_30d_fac = user_debit_amount_30d / (fmean + 0.01)
       - Hora local: tz_localize("UTC").astimezone(ZoneInfo(iana_tz)) — idéntico a _local_hour_dow
@@ -145,7 +144,7 @@ def add_frame_features_from_artifact(df: pd.DataFrame, stats: dict) -> pd.DataFr
         stats: dict cargado de facility_stats_v1.json.
 
     Returns:
-        Copia de df con las 31 columnas de FRAME_V1_FEATURE_NAMES añadidas.
+        Copia de df con las 30 columnas de FRAME_V1_FEATURE_NAMES añadidas.
     """
     df = df.copy()
     fid_arr = df["facility_id"].to_numpy(dtype=np.int32)
@@ -159,15 +158,11 @@ def add_frame_features_from_artifact(df: pd.DataFrame, stats: dict) -> pd.DataFr
     g_iqrg = gfb["iqr_guarded"]
 
     fmean_arr = np.array([fid_to_mean.get(int(f), g_mean) for f in fid_arr], dtype=np.float64)
-    fmedian_arr = np.array([fid_to_median.get(int(f), g_median) for f in fid_arr], dtype=np.float64)
     fiqrg_arr = np.array([fid_to_iqrg.get(int(f), g_iqrg) for f in fid_arr], dtype=np.float64)
 
-    # --- 2. Magnitud relativa a facility (aritmética de _compute_frame_features líneas 213-217) ---
+    # --- 2. Magnitud relativa a facility (aritmética de _compute_frame_features líneas 213-216) ---
     log_amount_fac = np.log1p(amt_arr / (fmean_arr + 0.01))
     amount_facility_ratio = amt_arr / (fmean_arr + 0.01)
-    # z-score robusto IQR-guarded: (amount - median) / iqr_guarded
-    # iqr_guarded = max(iqr, 1.0) — denominador >= 1.0 (decisión 01-01)
-    amount_fac_z = (amt_arr - fmedian_arr) / fiqrg_arr
     user_amount_24h_arr = df["user_amount_24h"].to_numpy(dtype=np.float64)
     user_amount_24h_fac = user_amount_24h_arr / (fmean_arr + 0.01)
     user_debit_amount_30d_arr = df["user_debit_amount_30d"].to_numpy(dtype=np.float64)
@@ -244,7 +239,7 @@ def add_frame_features_from_artifact(df: pd.DataFrame, stats: dict) -> pd.DataFr
         dtype=np.float32
     )
 
-    # --- 7. Ensamblar las 31 columnas en orden FRAME_V1_FEATURE_NAMES ---
+    # --- 7. Ensamblar las 30 columnas en orden FRAME_V1_FEATURE_NAMES ---
     df["log_amount_fac"] = log_amount_fac.astype(np.float32)
     # discount_ratio y has_tip ya existen en el parquet — usarlos tal cual
     df["hour_sin_loc"] = hour_sin_loc.astype(np.float32)
@@ -255,7 +250,6 @@ def add_frame_features_from_artifact(df: pd.DataFrame, stats: dict) -> pd.DataFr
     df["is_off_hours_loc"] = is_off_hours_loc
     df["user_amount_24h_fac"] = user_amount_24h_fac.astype(np.float32)
     df["amount_facility_ratio"] = amount_facility_ratio.astype(np.float32)
-    df["amount_fac_z"] = amount_fac_z.astype(np.float32)
     df["user_debit_amount_30d_fac"] = user_debit_amount_30d_fac.astype(np.float32)
     df["is_staff"] = is_staff
     df["staff_amount_zscore"] = staff_zscore_arr.astype(np.float32)
