@@ -64,13 +64,14 @@ class SingleFeatureCalculator:
 
         facility_avg = self._facility_avgs.get(fid, self._global_avg_amount)
         is_staff = context.user_role in ("court_manager", "court_operator", "teacher")
-        role_key = context.user_role if is_staff else "player"
+        # Use the actual role for zscore lookup — mirrors StaffRoleFeatures.transform()
+        # which iterates raw user_role without remapping non-staff to "player".
+        # is_staff is kept for F28 (is_staff binary flag).
+        actual_role = context.user_role or "player"
         currency = (payment.get("currency") or "USD").upper()
-        currency_key = (role_key, currency)
+        currency_key = (actual_role, currency)
         if currency_key in self._staff_stats:
             _s = self._staff_stats[currency_key]
-        elif (role_key, "USD") in self._staff_stats:
-            _s = self._staff_stats[(role_key, "USD")]
         elif currency in self._staff_currency_stats:
             _s = self._staff_currency_stats[currency]
         else:
