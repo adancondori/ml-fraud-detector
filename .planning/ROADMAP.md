@@ -14,7 +14,7 @@ El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 
 
 - [x] **Fase 0: Baseline Freeze y Bug Triage** — Corregir bugs activos en producción, fijar gate de sesgo, congelar baseline limpio antes de cualquier medición.
 - [x] **Fase 1: Artefacto de Stats y Feature Calculator** — Construir la raíz de dependencias: `facility_stats_v1.json` y `FrameV1FeatureCalculator` con paridad batch↔real-time verificada.
-- [ ] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
+- [x] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
 - [ ] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
 - [ ] **Fase 4: Shadow Dual-Run y Validación de Sesgo** — Activar puntuación dual (champion vs frame-v1), monitoreo shadow y gate go/no-go cuantitativo sobre datos reales.
 - [ ] **Fase 5: Cola HITL y Captura de Etiquetas** — Abrir cola de revisión humana top-k, capturar etiquetas con procedencia completa, incluir muestreo defensivo de falsos negativos.
@@ -67,9 +67,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Extender currency_fallbacks (n>=1000, 14 monedas) + regenerar `facility_stats_v1.json` + re-correr paridad Fase 1 [Wave 1]
-- [ ] 02-02-PLAN.md — `SegmentedThresholdCalibrator` + `SegmentedThresholdClassifier` + `thresholds_segmented_v1.json` (scores frame-v1, guarda n>=200) [Wave 2]
-- [ ] 02-03-PLAN.md — Loader retrocompatible (+ fix metadata frame-v1 con artifact_files) + contrato API frame-v1 (schemas sin default silencioso, respuesta enriquecida) [Wave 3]
+- [x] 02-01-PLAN.md — Extender currency_fallbacks (n>=1000, 14 monedas) + regenerar `facility_stats_v1.json` + re-correr paridad Fase 1 [Wave 1]
+- [x] 02-02-PLAN.md — `SegmentedThresholdCalibrator` + `SegmentedThresholdClassifier` + `thresholds_segmented_v1.json` (scores frame-v1, guarda n>=200) [Wave 2]
+- [x] 02-03-PLAN.md — Loader retrocompatible (+ fix metadata frame-v1 con artifact_files) + contrato API frame-v1 (schemas sin default silencioso, respuesta enriquecida) [Wave 3]
 
 ### Fase 3: Wiring del Scorer e Integración Platform
 **Goal**: El scorer en vivo despacha al `FrameV1FeatureCalculator` usando los artefactos de Fase 2; Rails envía `facility_time_zone_iana` en cada request real-time; `AlertManager` persiste la metadata de alerta ampliada; el universo `scorable?` está alineado entre batch y real-time.
@@ -125,7 +125,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
 | 1. Artefacto de Stats y Feature Calculator | 3/3 | ✓ Complete | 2026-07-06 |
-| 2. Calibración Segmentada y Contrato API | 0/3 | Planned | - |
+| 2. Calibración Segmentada y Contrato API | 3/3 | ✓ Complete | 2026-07-06 |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
 | 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
 | 5. Cola HITL y Captura de Etiquetas | 0/TBD | Not started | - |

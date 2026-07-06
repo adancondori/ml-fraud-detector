@@ -27,10 +27,10 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Calibración segmentada y contrato API (Fase 2)
 
-- [ ] **CAL-01**: Los umbrales se calibran por segmento con cadena de fallback (facility → currency_group → global) y guarda de n mínimo, en `thresholds_segmented_v1.json`
-- [ ] **CAL-02**: El `artifact_loader` carga stats + thresholds segmentados de forma retrocompatible, validando `feature_version`
-- [ ] **API-01**: El contrato `frame-v1` acepta `amount_local`, `currency` y `facility_time_zone_iana` como opcionales sin defaults silenciosos; ausencia activa flags observables
-- [ ] **API-02**: La respuesta del scorer incluye `calibration_segment`, `fallback_level` y `frame_flags`
+- [x] **CAL-01**: Los umbrales se calibran por segmento con cadena de fallback (facility → currency_group → global) y guarda de n mínimo, en `thresholds_segmented_v1.json`
+- [x] **CAL-02**: El `artifact_loader` carga stats + thresholds segmentados de forma retrocompatible, validando `feature_version`
+- [x] **API-01**: El contrato `frame-v1` acepta `amount_local`, `currency` y `facility_time_zone_iana` como opcionales sin defaults silenciosos; ausencia activa flags observables
+- [x] **API-02**: La respuesta del scorer incluye `calibration_segment`, `fallback_level` y `frame_flags`
 
 ### Integración platform (Fase 3)
 
@@ -93,10 +93,10 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 | FRAME-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
 | FRAME-03 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
 | FRAME-04 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
-| CAL-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
-| CAL-02 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
-| API-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
-| API-02 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
+| CAL-01 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
+| CAL-02 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
+| API-01 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
+| API-02 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
 | PLAT-01 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
 | PLAT-02 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
 | PLAT-03 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
