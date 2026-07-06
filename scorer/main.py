@@ -51,6 +51,15 @@ class ScorerSettings(BaseSettings):
     # Explicit, off-by-default bypass for the non-local WRITE host guardrail.
     allow_nonlocal_anomaly_score_writes: bool = False
 
+    # Shadow dual-run configuration (Fase 4 — SHAD-01).
+    # scoring_mode='active'      → single scorer, no dual-run (default, backward compat).
+    # scoring_mode='shadow_dual' → loads champion (IF-40) + challenger (frame-v1),
+    #                              produces 2 rows/payment in anomaly_scores.
+    scoring_mode: str = "active"
+    # Metadata filenames used to distinguish the two models when both live in model_dir.
+    shadow_champion_metadata: str = "model_metadata.json"
+    shadow_new_metadata: str = "model_metadata_frame_v1.json"
+
 
 settings = ScorerSettings()
 
@@ -101,6 +110,52 @@ async def lifespan(app: FastAPI):
     _deps._state["model_loaded"] = True
     _deps._state["model_version"] = scorer._model_version
     _deps._state["last_batch_at"] = None
+    _deps._state["scoring_mode"] = settings.scoring_mode
+
+    # Shadow dual-run (SHAD-01): load champion + challenger when scoring_mode='shadow_dual'.
+    # Both models live in the same model_dir; they are distinguished by metadata filename.
+    # The active scorer above is unaffected — this block is purely additive.
+    if settings.scoring_mode == "shadow_dual":
+        import logging as _logging
+
+        _dual_logger = _logging.getLogger(__name__)
+
+        champion_artifacts = load_artifacts(
+            model_dir, metadata_filename=settings.shadow_champion_metadata
+        )
+        new_artifacts = load_artifacts(
+            model_dir, metadata_filename=settings.shadow_new_metadata
+        )
+        scorer_champion = SingleTransactionScorer(
+            feature_engineer_path=str(model_dir / "feature_engineer.joblib"),
+            ch_connector=read_ch_client,
+            artifacts=champion_artifacts,
+        )
+        scorer_new = SingleTransactionScorer(
+            feature_engineer_path=str(model_dir / "feature_engineer.joblib"),
+            ch_connector=read_ch_client,
+            artifacts=new_artifacts,
+        )
+
+        assert scorer_champion._model_version == "IF-40-v1", (
+            f"shadow_dual: expected champion model_version='IF-40-v1', "
+            f"got {scorer_champion._model_version!r}. "
+            f"Check shadow_champion_metadata setting."
+        )
+        assert scorer_new._model_version == "frame-v1", (
+            f"shadow_dual: expected challenger model_version='frame-v1', "
+            f"got {scorer_new._model_version!r}. "
+            f"Check shadow_new_metadata setting."
+        )
+
+        _dual_logger.info(
+            "shadow_dual: champion=%s challenger=%s",
+            scorer_champion._model_version,
+            scorer_new._model_version,
+        )
+
+        _deps._state["scorer_champion"] = scorer_champion
+        _deps._state["scorer_new"] = scorer_new
 
     # Guardrail metadata consumed by the /score/batch route.
     _deps._state["anomaly_scores_table"] = settings.anomaly_scores_table

@@ -151,3 +151,42 @@ class TestArtifactsWarnings:
 
         with pytest.warns(UserWarning, match="thresholds_segmented is None"):
             load_artifacts(frame_dir)
+
+
+# ---------------------------------------------------------------------------
+# metadata_filename override tests (SHAD-01 — dual-run support)
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataFilenameOverride:
+    """load_artifacts(metadata_filename=...) loads the correct model without renaming files."""
+
+    def test_default_filename_loads_if40(self):
+        """Default metadata_filename='model_metadata.json' → IF-40-v1 (regression guard)."""
+        artifacts = load_artifacts(MODEL_DIR)
+        assert artifacts.metadata["model_version"] == "IF-40-v1"
+        assert len(artifacts.feature_list) == 40
+        assert artifacts.facility_stats is None
+        assert artifacts.thresholds_segmented is None
+
+    def test_explicit_default_filename_same_as_default(self):
+        """Passing metadata_filename='model_metadata.json' explicitly behaves identically."""
+        artifacts_default = load_artifacts(MODEL_DIR)
+        artifacts_explicit = load_artifacts(MODEL_DIR, metadata_filename="model_metadata.json")
+        assert artifacts_default.metadata["model_version"] == artifacts_explicit.metadata["model_version"]
+        assert len(artifacts_default.feature_list) == len(artifacts_explicit.feature_list)
+
+    def test_frame_v1_filename_loads_frame_v1(self):
+        """metadata_filename='model_metadata_frame_v1.json' → frame-v1 with 30 features."""
+        artifacts = load_artifacts(MODEL_DIR, metadata_filename="model_metadata_frame_v1.json")
+        assert artifacts.metadata["model_version"] == "frame-v1"
+        assert len(artifacts.feature_list) == 30
+        assert artifacts.facility_stats is not None, "facility_stats must be loaded for frame-v1"
+        assert artifacts.thresholds_segmented is not None, (
+            "thresholds_segmented must be loaded for frame-v1"
+        )
+
+    def test_missing_explicit_filename_raises(self, tmp_path):
+        """An explicit metadata_filename that does not exist raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="nonexistent.json"):
+            load_artifacts(tmp_path, metadata_filename="nonexistent.json")

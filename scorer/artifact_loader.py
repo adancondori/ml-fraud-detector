@@ -22,10 +22,18 @@ class Artifacts:
     thresholds_segmented: Optional[dict] = field(default=None)
 
 
-def load_artifacts(model_dir: Path) -> Artifacts:
-    """Load model artifacts atomically and validate their feature contract."""
+def load_artifacts(model_dir: Path, metadata_filename: str = "model_metadata.json") -> Artifacts:
+    """Load model artifacts atomically and validate their feature contract.
+
+    Args:
+        model_dir: Directory containing model artifacts.
+        metadata_filename: Name of the metadata JSON file to load.  Defaults to
+            ``"model_metadata.json"`` (IF-40 champion).  Pass
+            ``"model_metadata_frame_v1.json"`` to load the challenger explicitly
+            without renaming files on disk.
+    """
     model_dir = Path(model_dir)
-    metadata = _load_metadata(model_dir)
+    metadata = _load_metadata(model_dir, metadata_filename=metadata_filename)
     files = metadata["artifact_files"]
 
     model = joblib.load(model_dir / files["model"])
@@ -74,38 +82,55 @@ def load_artifacts(model_dir: Path) -> Artifacts:
     )
 
 
-def _load_metadata(model_dir: Path) -> dict:
-    metadata_path = model_dir / "model_metadata.json"
+def _load_metadata(
+    model_dir: Path,
+    metadata_filename: str = "model_metadata.json",
+) -> dict:
+    """Load metadata JSON from *model_dir*/*metadata_filename*.
+
+    The legacy fallbacks (final_feature_list.json → IF-40; default → IF-31) are
+    only applied when *metadata_filename* is the default ``"model_metadata.json"``
+    so that an explicit override (e.g. ``"model_metadata_frame_v1.json"``) raises
+    naturally if the file is absent rather than silently returning a wrong version.
+    """
+    metadata_path = model_dir / metadata_filename
     if metadata_path.exists():
         return json.loads(metadata_path.read_text())
 
-    legacy_features = model_dir / "final_feature_list.json"
-    if legacy_features.exists():
+    # Legacy fallbacks — only when the caller did not request an explicit override.
+    if metadata_filename == "model_metadata.json":
+        legacy_features = model_dir / "final_feature_list.json"
+        if legacy_features.exists():
+            return {
+                "model_version": "IF-40-v1",
+                "feature_version": "enriched-40",
+                "score_function": "decision_function",
+                "threshold_version": "v2",
+                "artifact_files": {
+                    "model": "isolation_forest_final.joblib",
+                    "scaler": "scaler_final.joblib",
+                    "feature_list": "final_feature_list.json",
+                    "thresholds": "thresholds_v2.json",
+                },
+            }
+
         return {
-            "model_version": "IF-40-v1",
-            "feature_version": "enriched-40",
-            "score_function": "decision_function",
-            "threshold_version": "v2",
+            "model_version": "IF-31-v1",
+            "feature_version": "base-31",
+            "score_function": "score_samples",
+            "threshold_version": "v1",
             "artifact_files": {
-                "model": "isolation_forest_final.joblib",
-                "scaler": "scaler_final.joblib",
-                "feature_list": "final_feature_list.json",
-                "thresholds": "thresholds_v2.json",
+                "model": "isolation_forest.joblib",
+                "scaler": "scaler.joblib",
+                "feature_list": "feature_list_legacy.json",
+                "thresholds": "thresholds.json",
             },
         }
 
-    return {
-        "model_version": "IF-31-v1",
-        "feature_version": "base-31",
-        "score_function": "score_samples",
-        "threshold_version": "v1",
-        "artifact_files": {
-            "model": "isolation_forest.joblib",
-            "scaler": "scaler.joblib",
-            "feature_list": "feature_list_legacy.json",
-            "thresholds": "thresholds.json",
-        },
-    }
+    raise FileNotFoundError(
+        f"Metadata file not found: {metadata_path}. "
+        "Verify that the file exists in the model directory."
+    )
 
 
 def _validate_artifacts(
