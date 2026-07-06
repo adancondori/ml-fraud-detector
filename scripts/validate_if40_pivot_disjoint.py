@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Train LOF and OC-SVM on the primary variant for HE4 screening.",
     )
+    parser.add_argument(
+        "--only-primary",
+        action="store_true",
+        help="Evaluate only the primary variant. Useful for comparator reruns.",
+    )
     parser.add_argument("--lof-sample", type=int, default=200_000)
     parser.add_argument("--ocsvm-sample", type=int, default=50_000)
     return parser.parse_args()
@@ -306,16 +311,15 @@ def audit_capture_delay(df_test: pd.DataFrame, y: np.ndarray) -> Dict[str, objec
     }
 
     raw = pd.read_parquet(DATA_DIR / "test_raw.parquet", columns=["id", "captured_at"])
-    if raw["id"].equals(df_test["id"]):
-        captured = pd.to_datetime(raw["captured_at"], errors="coerce").notna().to_numpy(np.int8)
-        audit["captured_at_coverage"] = float(captured.mean())
-        audit["captured_at_coverage_by_proxy"] = {
-            "positive": float(captured[y == 1].mean()),
-            "negative": float(captured[y == 0].mean()),
-        }
-        audit["auc_captured_at_present"] = float(roc_auc_score(y, captured))
-    else:
-        audit["captured_at_coverage"] = "not_computed_id_order_mismatch"
+    aligned = df_test[["id"]].merge(raw.drop_duplicates("id"), on="id", how="left", sort=False)
+    captured = pd.to_datetime(aligned["captured_at"], errors="coerce").notna().to_numpy(np.int8)
+    audit["captured_at_join_missing_rate"] = float(aligned["captured_at"].isna().mean())
+    audit["captured_at_coverage"] = float(captured.mean())
+    audit["captured_at_coverage_by_proxy"] = {
+        "positive": float(captured[y == 1].mean()),
+        "negative": float(captured[y == 0].mean()),
+    }
+    audit["auc_captured_at_present"] = float(roc_auc_score(y, captured))
     return audit
 
 
@@ -358,7 +362,13 @@ def main() -> None:
     primary_scaled = None
     primary_seed42_scores = None
 
-    for variant, drops in VARIANT_DROPS.items():
+    variant_items = (
+        {args.primary_variant: VARIANT_DROPS[args.primary_variant]}
+        if args.only_primary
+        else VARIANT_DROPS
+    )
+
+    for variant, drops in variant_items.items():
         variant_started = time.perf_counter()
         features = [f for f in final_features if f not in drops]
         for split_name, df in splits.items():
