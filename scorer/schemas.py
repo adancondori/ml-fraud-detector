@@ -27,7 +27,16 @@ class ScoreRequest(BaseModel):
     category: str = "reservation"
     club_credit_flag: bool = False
     paid_by_manager: bool = False
-    currency: str = "USD"
+    # Optional in frame-v1: None = absent (generates frame_flags.currency_missing).
+    # NEVER default to "USD" — that would silence the absence signal.
+    # The IF-40 scorer uses `payment.get("currency", "USD")` so None is backward-compat.
+    currency: Optional[str] = None
+    # Optional in frame-v1: None = absent (generates frame_flags.timezone_missing).
+    # NEVER default to "UTC" — silencing timezone absence is the exact bias being corrected.
+    facility_time_zone_iana: Optional[str] = None
+    # Informational only — amount in the facility's local currency (for logging/context).
+    # NOT passed to calculate(); used by upstream callers that want to log local amounts.
+    amount_local: Optional[float] = None
 
 
 class FactorItem(BaseModel):
@@ -37,6 +46,19 @@ class FactorItem(BaseModel):
     value: float
     z_score: float
     direction: str
+
+
+class FrameFlags(BaseModel):
+    """Observability flags for frame-v1 scoring context.
+
+    All flags default to False so that existing clients that do not consume
+    frame_flags are unaffected.  A True value means the corresponding context
+    was absent from the request or could not be resolved.
+    """
+
+    timezone_missing: bool = False
+    currency_missing: bool = False
+    currency_unknown: bool = False
 
 
 class ScoreResponse(BaseModel):
@@ -50,6 +72,10 @@ class ScoreResponse(BaseModel):
     model_version: str
     feature_version: str
     threshold_version: str
+    # Frame-v1 enrichment fields — all optional so legacy Rails clients are unaffected.
+    calibration_segment: Optional[str] = None
+    fallback_level: Optional[str] = None
+    frame_flags: Optional[FrameFlags] = None
 
 
 class BatchScoreRequest(BaseModel):
