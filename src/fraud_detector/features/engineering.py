@@ -643,7 +643,10 @@ class FeatureEngineer:
                 "staff",
                 "player",
             )
-        out["currency"] = out["currency"].fillna("USD").astype(str).str.upper()
+        out["currency"] = (
+            out["currency"].fillna("USD").astype(str).str.upper()
+            .replace({"EMPTY": "USD", "": "USD"})
+        )
         return out.sort_values(["user_id", "created_at", "id"]).reset_index(drop=True)
 
     @staticmethod

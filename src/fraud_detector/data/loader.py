@@ -201,6 +201,14 @@ class DataManager:
         out["user_role"] = out.get("user_role", "player").fillna("player").astype(str).replace("", "player")
 
         if "currency" in out.columns:
+            _cur = out["currency"].fillna("USD").astype(str).str.upper()
+            _empty_mask = _cur.isin(["EMPTY", ""])
+            _n_empty = int(_empty_mask.sum())
+            if _n_empty > 0:
+                logger.warning(
+                    f"Sanitized {_n_empty} rows with currency EMPTY/'' -> USD"
+                )
+            out["currency"] = _cur.replace({"EMPTY": "USD", "": "USD"})
             normalizer = self._get_normalizer()
             out = normalizer.normalize(
                 out,
