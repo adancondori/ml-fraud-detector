@@ -72,20 +72,19 @@ Plans:
 - [x] 02-03-PLAN.md — Loader retrocompatible (+ fix metadata frame-v1 con artifact_files) + contrato API frame-v1 (schemas sin default silencioso, respuesta enriquecida) [Wave 3]
 
 ### Fase 3: Wiring del Scorer e Integración Platform
-**Goal**: El scorer en vivo despacha al `FrameV1FeatureCalculator` usando los artefactos de Fase 2; Rails envía `facility_time_zone_iana` en cada request real-time; `AlertManager` persiste la metadata de alerta ampliada; el universo `scorable?` está alineado entre batch y real-time.
+**Goal**: El scorer en vivo despacha al `FrameV1FeatureCalculator` + `SegmentedThresholdClassifier` cuando los artefactos frame-v1 están presentes (retrocompat IF-40 preservada); la zona IANA se resuelve de forma autónoma en el scorer desde `facility_stats_v1.json` (Rails NO depende de enviarla); `AlertManager` persiste la metadata de alerta ampliada; el universo `scorable?` está alineado entre batch y real-time.
 **Depends on**: Fase 2 (artefactos completos y contrato API bloqueado).
 **Requirements**: PLAT-01, PLAT-02, PLAT-03
 **Success Criteria** (what must be TRUE):
-  1. `RealTimeScoringService` en Rails envía `facility_time_zone_iana` resuelto de forma segura (zonas Rails inválidas → `frame_flags.timezone_invalid=true`, no excepción).
-  2. `AlertManager` persiste `calibration_segment`, `fallback_level`, `frame_flags` y `feature_frame_version` en la metadata de alerta; los campos son consultables en ClickHouse.
+  1. El scorer produce features de hora local correctas resolviendo la zona IANA autónomamente desde el artefacto (`_lookup_facility`, fallback `Etc/UTC`); `frame_flags.timezone_missing=true` es observable cuando la facility no está en el artefacto, sin excepción. Rails puede enviar `facility_time_zone_iana` como metadata OPCIONAL (vía `facility.tzinfo_identifier`, DB-safe), pero el scorer no depende de ello (PLAT-01 reconciliado: fuente única de verdad en el scorer).
+  2. `AlertManager` persiste `calibration_segment`, `fallback_level`, `frame_flags` y `feature_frame_version` en la metadata JSON de la alerta (sin migración; columnas dedicadas y persistencia batch en ClickHouse diferidas a Fase 4).
   3. El universo `scorable?` excluye `payment_method IN ('reversal','free')` de forma idéntica en batch y real-time; los reembolsos se marcan post-hoc sin afectar el scoring.
-  4. Una transacción de prueba puntúa de extremo a extremo (Rails → scorer → ClickHouse) sin errores y con todos los campos de metadata presentes.
-**Plans**: TBD
+  4. Una transacción de prueba puntúa de extremo a extremo (Rails → scorer → alerta) en entorno de test sin errores y con todos los campos de metadata presentes (sin shadow/dual-run — eso es Fase 4).
+**Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Wiring del scorer: `SingleTransactionScorer` despacha a `FrameV1FeatureCalculator` + `SegmentedThresholdClassifier`
-- [ ] 03-02: Integración platform Rails: payload con `facility_time_zone_iana`, metadata de alerta ampliada, `scorable?` alineado
-
+- [ ] 03-01-PLAN.md — Wiring del scorer: `SingleTransactionScorer` despacha a `FrameV1FeatureCalculator` + `SegmentedThresholdClassifier` por presencia de artefactos; `ScoringResult` + router propagan `calibration_segment`/`fallback_level`/`frame_flags`; resolución IANA autónoma; retrocompat IF-40 [Wave 1]
+- [ ] 03-02-PLAN.md — Integración platform Rails: `AlertManager` persiste metadata frame-v1 (JSON, sin migración); `scorable?` excluye `free`; E2E de prueba Rails→scorer→alerta [Wave 2]
 ### Fase 4: Shadow Dual-Run y Validación de Sesgo
 **Goal**: Cada pago scorable recibe dos puntuaciones simultáneas (champion actual y frame-v1), ambas persistidas; las queries de monitoreo shadow reportan reducción de sesgo sobre datos reales; un gate go/no-go cuantitativo determina si frame-v1 puede promoverse.
 **Depends on**: Fase 3 (Rails enviando `facility_time_zone_iana`; scorer wired; metadata persistida).
