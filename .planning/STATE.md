@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 4 of 6 (Shadow/Dual-Run y Validación de Sesgo)
-Plan: 1 of 2 en Fase 4 (04-01 completo)
-Status: In progress — 04-01 completo; siguiente 04-02 (shadow monitoring + gate SHAD-02/SHAD-03)
-Last activity: 2026-07-06 — Completado 04-01-PLAN.md: DDL migration 3 cols frame-v1; ShadowDualRunner (contexto compartido, fallo parcial aislado); BatchScorer dual (2 filas/pago, 26 cols, tokens shadow-old-/shadow-new-); 57 tests verdes
+Plan: 2 of 2 en Fase 4 (04-02 código completo — checkpoint PENDING_DATA)
+Status: PENDING_DATA — 04-02 código entregado (shadow_monitor.py + shadow_gate.py, 31 tests verdes); gate real diferido hasta ≥2 semanas de shadow data; checkpoint Task 3 en espera
+Last activity: 2026-07-06 — Completado 04-02-PLAN.md (Tasks 1+2): shadow_monitor.py (4 métricas robustas), shadow_gate.py (guard INSUFFICIENT_DATA, Spearman scipy, exit 0/1/2), 31 tests. Checkpoint PENDING_DATA pausado.
 
-Progress: [█████████░] ~92% de Fases 0–4 (12/13 planes completados)
+Progress: [█████████░] ~96% de Fases 0–4 (13/14 planes — 04-02 código completo, checkpoint diferido)
 
 ## Performance Metrics
 
@@ -110,8 +110,15 @@ None yet.
 - [04-01]: _INSERT_COLUMNS 23→26; active mode pasa '' para las 3 cols frame-v1 (compatible con DEFAULT '' del DDL 02_anomaly_scores_frame_v1.sql).
 - [04-01]: assert_write_target_is_safe es primera llamada tanto en _insert_chunks (active) como en _insert_chunks_dual (shadow) — contrato del guardrail preservado.
 
+### New Decisions (04-02)
+
+- [04-02]: INSUFFICIENT_DATA usa OR lógico: days_span<14 OR n_rows<500 — basta con que UNA condición falle para abortar (guard previo a cualquier cómputo de métricas).
+- [04-02]: compute_spearman devuelve NaN (no lanza excepción) cuando hay <30 pares matched; gate marca spearman_pass=False en ese caso.
+- [04-02]: off-hours aproximado con UTC (horas 0-8, 22-23) como proxy; is_off_hours_loc no persiste en anomaly_scores; tz_missing_rate desde JSON frame_flags solo para shadow_new.
+- [04-02]: Import lazy de shadow_monitor en evaluate_gate() (sys.path insert) para evitar dependencia circular en tests y facilitar uso standalone.
+
 ## Session Continuity
 
-Last session: 2026-07-06T18:16:50Z
-Stopped at: Completado 04-01-PLAN.md (Fase 4 Plan 1 completo — DDL migration, ShadowDualRunner, BatchScorer dual mode, 57 tests verdes). Siguiente: Fase 4 Plan 2 (04-02 shadow monitoring + gate SHAD-02/SHAD-03).
+Last session: 2026-07-06T18:27:17Z
+Stopped at: Checkpoint PENDING_DATA — 04-02 código completo (shadow_monitor.py + shadow_gate.py, 31 tests, lint limpio). Gate real diferido: requiere ≥14 días de shadow data real. Reanudar cuando el operador tenga ≥2 semanas de SCORING_MODE=shadow_dual activo.
 Resume file: None
