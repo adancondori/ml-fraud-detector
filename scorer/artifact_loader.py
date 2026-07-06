@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import warnings
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import joblib
 
@@ -17,6 +18,8 @@ class Artifacts:
     feature_list: list[str]
     thresholds: dict
     metadata: dict
+    facility_stats: Optional[dict] = field(default=None)
+    thresholds_segmented: Optional[dict] = field(default=None)
 
 
 def load_artifacts(model_dir: Path) -> Artifacts:
@@ -36,6 +39,29 @@ def load_artifacts(model_dir: Path) -> Artifacts:
         feature_list = list(FEATURE_NAMES)
     thresholds = json.loads((model_dir / files["thresholds"]).read_text())
 
+    # Optional: load facility_stats and thresholds_segmented if referenced in metadata.
+    # For the IF-40 legacy path these keys are absent → both remain None (backward compat).
+    facility_stats: Optional[dict] = None
+    stats_artifact = metadata.get("stats_artifact")
+    if stats_artifact:
+        stats_path = model_dir / stats_artifact
+        if stats_path.exists():
+            facility_stats = json.loads(stats_path.read_text())
+
+    thresholds_segmented: Optional[dict] = None
+    seg_artifact = metadata.get("thresholds_segmented_artifact")
+    if seg_artifact:
+        seg_path = model_dir / seg_artifact
+        if seg_path.exists():
+            thresholds_segmented = json.loads(seg_path.read_text())
+
+    if facility_stats is not None and thresholds_segmented is None:
+        warnings.warn(
+            "facility_stats loaded but thresholds_segmented is None — "
+            "check that thresholds_segmented_artifact is set in metadata.",
+            stacklevel=2,
+        )
+
     _validate_artifacts(model, scaler, feature_list, thresholds, metadata)
     return Artifacts(
         model=model,
@@ -43,6 +69,8 @@ def load_artifacts(model_dir: Path) -> Artifacts:
         feature_list=feature_list,
         thresholds=thresholds,
         metadata=metadata,
+        facility_stats=facility_stats,
+        thresholds_segmented=thresholds_segmented,
     )
 
 
