@@ -198,6 +198,80 @@ class DataManager:
             logger.warning(f"Sanitized {n_empty} rows with currency EMPTY/'' -> USD")
         return normalized.replace({"EMPTY": "USD", "": "USD"})
 
+    @staticmethod
+    def compute_amount_sanity_thresholds(df: pd.DataFrame) -> Dict[str, float]:
+        """Compute per-currency p99.99 sanity thresholds from a reference DataFrame.
+
+        Used to derive the cap for _sanitize_amount_df.  The reference should be
+        the training set (so thresholds are learned from in-distribution data and
+        applied identically to future extractions and splits).
+
+        Args:
+            df: DataFrame with 'amount' and 'currency' columns.
+
+        Returns:
+            Dict mapping currency code (str) -> p99.99 threshold (float).
+        """
+        thresholds: Dict[str, float] = {}
+        for cur, grp in df.groupby("currency"):
+            thresholds[str(cur)] = float(grp["amount"].quantile(0.9999))
+        return thresholds
+
+    @staticmethod
+    def sanitize_amount_df(
+        df: pd.DataFrame,
+        thresholds: Optional[Dict[str, float]],
+        *,
+        split_name: str = "unknown",
+        drop: bool = True,
+    ) -> pd.DataFrame:
+        """Drop (or flag) rows whose amount exceeds the per-currency p99.99 threshold.
+
+        This guard catches data-entry errors (e.g., USD 100,000,000 at facility 1422)
+        that inflate the top-5% amount metric used in Gate 1 and corrupt magnitude
+        features such as log_amount_fac.  It is analogous to _sanitize_currency for
+        'EMPTY' values: a preventive quality gate, not a feature-engineering step.
+
+        The sanitation applies ONLY to training data before fit() — it must NOT run
+        inside add_frame_features_from_artifact or any live-scoring path, to avoid
+        train/serve skew and preserve batch↔calculator parity.
+
+        Args:
+            df: DataFrame with 'amount' and 'currency' columns.
+            thresholds: Dict[currency -> p99.99 cap] from compute_amount_sanity_thresholds.
+                        If None or empty, no rows are dropped (safe no-op).
+            split_name: Label used in log messages (e.g., 'train').
+            drop: If True (default), drop rows above threshold.
+                  If False, add boolean column 'amount_corrupted' without dropping.
+
+        Returns:
+            Sanitized DataFrame.  Logs a warning with row count when any rows are
+            removed.  Expected count: ~6 in the current training corpus.
+        """
+        if not thresholds:
+            return df
+
+        corrupted_mask = pd.Series(False, index=df.index)
+        for cur, cap in thresholds.items():
+            corrupted_mask |= (df["currency"] == cur) & (df["amount"] > cap)
+
+        n_corrupted = int(corrupted_mask.sum())
+        if n_corrupted > 0:
+            logger.warning(
+                f"[amount_sanity] split={split_name}: {n_corrupted} rows with amount > "
+                f"per-currency p99.99 cap. "
+                f"max_amount={df.loc[corrupted_mask, 'amount'].max():.2f} "
+                f"(expected ~6 corrupt rows in train, ~2 in val). "
+                f"{'Dropping rows.' if drop else 'Flagging as amount_corrupted=True.'}"
+            )
+
+        if drop:
+            return df[~corrupted_mask].copy()
+        else:
+            out = df.copy()
+            out["amount_corrupted"] = corrupted_mask
+            return out
+
     def _postprocess_extraction(self, df: pd.DataFrame) -> pd.DataFrame:
         """Normalize schema and monetary values after extraction."""
         out = df.copy()

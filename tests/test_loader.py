@@ -194,3 +194,88 @@ class TestManifestAndLoad:
 
         with pytest.raises(FileNotFoundError):
             dm.load_split("test")
+
+
+class TestAmountSanityGuard:
+    """Tests for compute_amount_sanity_thresholds and sanitize_amount_df."""
+
+    @pytest.fixture
+    def amount_df(self):
+        """Small DataFrame with two currencies and one extreme outlier each."""
+        return pd.DataFrame(
+            {
+                "amount": [10.0, 50.0, 100.0, 200.0, 500.0, 1_000.0, 5_000.0,  # USD normal
+                           100_000_000.0,                                          # USD corrupt
+                           5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0,           # CAD normal
+                           50_000_000.0],                                          # CAD corrupt
+                "currency": (["USD"] * 7 + ["USD"]
+                             + ["CAD"] * 7 + ["CAD"]),
+            }
+        )
+
+    def test_compute_thresholds_per_currency(self, amount_df):
+        from fraud_detector.data.loader import DataManager
+
+        thresholds = DataManager.compute_amount_sanity_thresholds(amount_df)
+
+        assert "USD" in thresholds
+        assert "CAD" in thresholds
+        # p99.99 must be below the extreme outlier values
+        assert thresholds["USD"] < 100_000_000.0
+        assert thresholds["CAD"] < 50_000_000.0
+
+    def test_sanitize_drop_removes_corrupt_rows(self, amount_df):
+        from fraud_detector.data.loader import DataManager
+
+        thresholds = DataManager.compute_amount_sanity_thresholds(amount_df)
+        cleaned = DataManager.sanitize_amount_df(
+            amount_df, thresholds, split_name="train", drop=True
+        )
+
+        # Corrupt rows (100M USD and 50M CAD) must be gone
+        assert cleaned["amount"].max() < 50_000_000.0
+        assert len(cleaned) == len(amount_df) - 2
+
+    def test_sanitize_flag_marks_corrupt_rows(self, amount_df):
+        from fraud_detector.data.loader import DataManager
+
+        thresholds = DataManager.compute_amount_sanity_thresholds(amount_df)
+        flagged = DataManager.sanitize_amount_df(
+            amount_df, thresholds, split_name="train", drop=False
+        )
+
+        assert "amount_corrupted" in flagged.columns
+        assert int(flagged["amount_corrupted"].sum()) == 2
+        assert len(flagged) == len(amount_df)
+
+    def test_sanitize_no_op_when_no_thresholds(self, amount_df):
+        from fraud_detector.data.loader import DataManager
+
+        original_len = len(amount_df)
+        result = DataManager.sanitize_amount_df(
+            amount_df, thresholds=None, split_name="train"
+        )
+        assert len(result) == original_len
+
+        result_empty = DataManager.sanitize_amount_df(
+            amount_df, thresholds={}, split_name="train"
+        )
+        assert len(result_empty) == original_len
+
+    def test_sanitize_normal_data_untouched(self):
+        from fraud_detector.data.loader import DataManager
+
+        # Build a dataset where the hard-coded threshold is clearly above all values.
+        # Using a threshold from a reference set with a much higher max prevents the
+        # p99.99 of the reference coinciding with the maximum of the validation data.
+        reference = pd.DataFrame(
+            {"amount": list(range(1, 101)) + [1_000_000.0], "currency": ["USD"] * 101}
+        )
+        thresholds = DataManager.compute_amount_sanity_thresholds(reference)
+
+        # Normal data: all amounts well below the p99.99 of the reference
+        normal = pd.DataFrame(
+            {"amount": [10.0, 50.0, 100.0, 200.0, 300.0], "currency": ["USD"] * 5}
+        )
+        cleaned = DataManager.sanitize_amount_df(normal, thresholds, split_name="train")
+        assert len(cleaned) == len(normal)
