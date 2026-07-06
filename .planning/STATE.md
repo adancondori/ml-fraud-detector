@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 
 ## Current Position
 
-Phase: 0 of 6 (Baseline Freeze y Bug Triage)
-Plan: 2 of 4 in current phase (00-01 y 00-02 completos)
-Status: In progress
-Last activity: 2026-07-06 — Completado 00-02-PLAN.md: currency EMPTY sanitized, FS-frame-operational-v1 materializado, threshold legacy marcado
+Phase: 0 of 6 (Baseline Freeze y Bug Triage) — COMPLETA
+Plan: 3 of 3 en Fase 0 (00-01, 00-02, 00-03 completos)
+Status: Fase 0 completa — lista para iniciar Fase 1
+Last activity: 2026-07-06 — Completado 00-03-PLAN.md: golden set congelado, baseline_v0.json materializado, gate de sesgo formal, checkpoint humano aprobado
 
-Progress: [██░░░░░░░░] 20%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
@@ -42,6 +42,9 @@ Progress: [██░░░░░░░░] 20%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Fase 0 - 00-03]: Baseline v0 congelado: top-5% ratio=11.79x, off-hours UTC=29.78% son el punto de partida para Fase 1 (no 15.7x del research — cohorte/feature set distinto).
+- [Fase 0 - 00-03]: AUC pure_fraud=0.836 etiquetado diagnostic_circular_not_a_gate_metric. 4 features: same_amount_count_1h, user_account_age_days, user_txn_count_1h, is_third_party_payment.
+- [Fase 0 - 00-03]: Golden set = 14831 filas, 680 facilities, seed=42. output/golden_set_v0.parquet reproducible byte-a-byte.
 - [Fase 0]: Gate de éxito = reducción de sesgo (top-5% <4×, off-hours ~4–5%); AUC vs `pure_fraud` es circularidad — diagnóstico, no criterio.
 - [Fase 1]: Modelo global único + calibración segmentada (no un modelo por moneda); stats artifact cargado en memoria para presupuesto de 200ms.
 - [Proyecto]: `capture_delay_seconds` excluido de `FS-frame-operational-v1` (train/serve skew: ~0 en real-time vs valor real en batch; AUC flag 0,511).
@@ -63,6 +66,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T05:14:32Z
-Stopped at: Completado 00-01-PLAN.md (getattr fix, NaT fix, test de paridad batch<->real-time).
+Last session: 2026-07-06T05:24:50Z
+Stopped at: Completado 00-03-PLAN.md (golden set, baseline_v0.json congelado, checkpoint humano aprobado). Fase 0 completa.
 Resume file: None
