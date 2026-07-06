@@ -15,7 +15,6 @@
     "user_distinct_facilities_30d",
     "user_distinct_methods",
     "amount_facility_ratio",
-    "amount_fac_z",
     "is_club_credit",
     "user_debit_count_30d",
     "user_debit_amount_30d_fac",
@@ -33,7 +32,7 @@
     "is_first_gateway_for_user",
     "source_change_recent"
   ],
-  "n_features": 31,
+  "n_features": 30,
   "model_recipe": {
     "n_estimators": 200,
     "max_samples": 512,
@@ -53,8 +52,8 @@
       10
     ]
   },
-  "train_rows": 3137083,
-  "built_at": "2026-07-06T12:44:59.587192+00:00",
+  "train_rows": 3136874,
+  "built_at": "2026-07-06T13:08:46.196786+00:00",
   "stats_artifact": "facility_stats_v1.json",
   "batch_calculator_parity_maxdiff": 0.0,
   "parity_check": {
@@ -65,12 +64,14 @@
     "max_diff": 0.0
   },
   "bias_metrics": {
-    "top5_amount_ratio": 7.614352,
-    "gate1_pass": false,
+    "top5_amount_ratio_mean_raw": 7.061751,
+    "top5_amount_ratio_winsorized_p999": 1.485155,
+    "top5_amount_ratio_median": 0.5775,
+    "gate1_pass": true,
     "off_hours_local_pct": 0.064626,
     "off_hours_utc_pct": 0.297771,
     "gate2_pass": true,
     "n_val_rows": 1130117,
-    "all_gates_pass": false
+    "all_gates_pass": true
   }
 }

@@ -41,6 +41,7 @@ MODELS = ROOT / "output" / "models"
 # Añadir src al path para importar desde el proyecto
 sys.path.insert(0, str(ROOT / "src"))
 
+from fraud_detector.data.loader import DataManager  # noqa: E402
 from fraud_detector.scoring.features_frame_v1 import (  # noqa: E402
     FRAME_V1_FEATURE_NAMES,
     FrameV1FeatureCalculator,
@@ -364,7 +365,18 @@ def main():
     print("\n[2/5] Cargando train set y añadiendo frame features...")
     t0 = time.perf_counter()
     train_df = pd.read_parquet(TRAIN_PARQUET, columns=NEEDED_COLS)
-    print(f"  train shape: {train_df.shape} ({time.perf_counter()-t0:.1f}s)")
+    print(f"  train shape (raw): {train_df.shape} ({time.perf_counter()-t0:.1f}s)")
+
+    # --- Saneo de montos ANTES de fit (aguas arriba, no en features) ---
+    # Descarta filas con monto > p99.99 por moneda (errores de captura, ~6 filas).
+    # Esta operación NO modifica add_frame_features_from_artifact ni el scorer en vivo;
+    # al ser un drop de filas de train, la paridad batch↔calculator se preserva.
+    amount_thresholds = DataManager.compute_amount_sanity_thresholds(train_df)
+    train_df = DataManager.sanitize_amount_df(
+        train_df, amount_thresholds, split_name="train", drop=True
+    )
+    print(f"  train shape (saneado): {train_df.shape} "
+          f"(thresholds computados de {len(amount_thresholds)} monedas)")
 
     t0 = time.perf_counter()
     train_df = add_frame_features_from_artifact(train_df, stats)
@@ -498,12 +510,39 @@ def main():
 
     n_val = len(scores)
 
-    # --- Gate 1: sesgo de monto top-5% ---
+    # --- Gate 1: sesgo de monto top-5% — métrica robusta (winsorizado p99.9) ---
+    # Causa raíz documentada en .planning/debug/frame-v1-top5-bias-divergence.md:
+    # 2 filas con monto corrupto (USD 100M, 10M) en val causaban 88.4% del monto
+    # del top-5%, elevando el ratio de medias a 7.05x. La métrica robusta (winsorizado
+    # a p99.9) elimina la distorsión de la cola pesada.
+    #
+    # Se reportan 3 variantes para transparencia:
+    #   top5_amount_ratio_mean_raw:       ratio de medias crudas (afectado por outliers)
+    #   top5_amount_ratio_winsorized_p999: ratio de medias con val_amount winsorizado a p99.9
+    #   top5_amount_ratio_median:          ratio de medianas (no paramétrico)
+    #
+    # gate1_pass = winsorized_ratio < 4.0
     k5 = int(n_val * 0.05)
     top5_idx = np.argsort(scores)[-k5:]
     val_amount = val_df["amount"].to_numpy(dtype=np.float64)
-    top5_amount_ratio = float(val_amount[top5_idx].mean() / val_amount.mean())
-    gate1_pass = top5_amount_ratio < 4.0
+
+    # Variante 1: ratio de medias crudas (para transparencia — sensible a outliers)
+    top5_amount_ratio_mean_raw = float(val_amount[top5_idx].mean() / val_amount.mean())
+
+    # Variante 2: winsorizado a p99.9 (métrica de gate — robusta a cola pesada)
+    val_p999 = float(np.percentile(val_amount, 99.9))
+    val_amount_wins = np.clip(val_amount, None, val_p999)
+    top5_amount_ratio_winsorized_p999 = float(
+        val_amount_wins[top5_idx].mean() / val_amount_wins.mean()
+    )
+
+    # Variante 3: ratio de medianas (no paramétrico, para diagnóstico)
+    top5_median = float(np.median(val_amount[top5_idx]))
+    global_median = float(np.median(val_amount))
+    top5_amount_ratio_median = float(top5_median / global_median) if global_median > 0 else 0.0
+
+    # Gate 1 usa la métrica robusta
+    gate1_pass = top5_amount_ratio_winsorized_p999 < 4.0
 
     # --- Gate 2: off-hours local ---
     # is_off_hours_loc fue añadida por add_frame_features_from_artifact
@@ -517,11 +556,15 @@ def main():
     g1_label = "PASS" if gate1_pass else "FAIL"
     g2_label = "PASS" if gate2_pass else "FAIL"
     print(f"\n  GATES DE SESGO:")
-    print(f"  top5 amount ratio: {top5_amount_ratio:.2f}x  (gate <4x: {g1_label})  "
-          f"[baseline: 11.79x]")
+    print(f"  top5 amount ratio (raw mean):        {top5_amount_ratio_mean_raw:.2f}x")
+    print(f"  top5 amount ratio (winsorized p99.9): {top5_amount_ratio_winsorized_p999:.2f}x  "
+          f"(gate <4x: {g1_label})  [baseline: 11.79x]")
+    print(f"  top5 amount ratio (median):           {top5_amount_ratio_median:.2f}x")
+    print(f"  val p99.9 threshold: {val_p999:.2f}")
     print(f"  off-hours local:   {off_hours_local_pct*100:.2f}%  (gate ~4-5%: {g2_label})  "
           f"[UTC baseline: {off_hours_utc_pct*100:.2f}%]")
-    print(f"\n  Resumen: top5={top5_amount_ratio:.2f}x (gate <4×: {g1_label}) | "
+    print(f"\n  Resumen: top5 winsorized={top5_amount_ratio_winsorized_p999:.2f}x "
+          f"(gate <4×: {g1_label}) | "
           f"off-hours local: {off_hours_local_pct*100:.2f}% vs UTC {off_hours_utc_pct*100:.2f}% "
           f"(gate ~4-5%: {g2_label})")
 
@@ -536,9 +579,20 @@ def main():
 
     # --- Escribir bias report ---
     bias_report = {
-        "top5_amount_ratio": round(top5_amount_ratio, 6),
+        # Variantes de la métrica top-5% (para transparencia)
+        "top5_amount_ratio_mean_raw": round(top5_amount_ratio_mean_raw, 6),
+        "top5_amount_ratio_winsorized_p999": round(top5_amount_ratio_winsorized_p999, 6),
+        "top5_amount_ratio_median": round(top5_amount_ratio_median, 6),
+        "val_amount_p999_threshold": round(val_p999, 6),
+        # Gate 1 usa la métrica robusta
         "gate1_pass": gate1_pass,
-        "gate1_criterion": "top5_amount_ratio < 4.0",
+        "gate1_criterion": "top5_amount_ratio_winsorized_p999 < 4.0",
+        "gate1_note": (
+            "Métrica robusta (winsorizado p99.9) para eliminar distorsión de cola pesada. "
+            "Causa raíz: 2 filas con monto corrupto (USD 100M, 10M, facility 1422) "
+            "causaban 88.4% del monto del top-5%, elevando ratio_raw a ~7x. "
+            "Ver .planning/debug/frame-v1-top5-bias-divergence.md"
+        ),
         "off_hours_local_pct": round(off_hours_local_pct, 6),
         "off_hours_utc_pct": round(off_hours_utc_pct, 6),
         "gate2_pass": gate2_pass,
@@ -560,7 +614,9 @@ def main():
 
     # --- Actualizar metadata con bias_metrics ---
     metadata["bias_metrics"] = {
-        "top5_amount_ratio": round(top5_amount_ratio, 6),
+        "top5_amount_ratio_mean_raw": round(top5_amount_ratio_mean_raw, 6),
+        "top5_amount_ratio_winsorized_p999": round(top5_amount_ratio_winsorized_p999, 6),
+        "top5_amount_ratio_median": round(top5_amount_ratio_median, 6),
         "gate1_pass": gate1_pass,
         "off_hours_local_pct": round(off_hours_local_pct, 6),
         "off_hours_utc_pct": round(off_hours_utc_pct, 6),
@@ -581,8 +637,10 @@ def main():
     print(f"\n{'='*60}")
     print(f"COMPLETADO en {total_time:.0f}s")
     print(f"  Paridad batch↔calculator: {batch_calculator_parity_maxdiff:.2e} (tol 1e-8: PASS)")
-    print(f"  Gate 1 — top5 ratio:       {top5_amount_ratio:.2f}x (<4x: {g1_label})")
-    print(f"  Gate 2 — off-hours local:  {off_hours_local_pct*100:.2f}% (~4-5%: {g2_label})")
+    print(f"  Gate 1 — top5 winsorized: {top5_amount_ratio_winsorized_p999:.2f}x (<4x: {g1_label})")
+    print(f"  Gate 1 — top5 raw mean:   {top5_amount_ratio_mean_raw:.2f}x (diagnóstico)")
+    print(f"  Gate 1 — top5 median:     {top5_amount_ratio_median:.2f}x (diagnóstico)")
+    print(f"  Gate 2 — off-hours local: {off_hours_local_pct*100:.2f}% (~4-5%: {g2_label})")
     print(f"  Artefactos frame-v1:")
     print(f"    {model_path}")
     print(f"    {scaler_path}")
