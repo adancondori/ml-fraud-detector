@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 3 — Wiring del Scorer e Integración Platform
+**Current focus:** Fase 4 — Shadow/Dual-Run (Fase 3 completa)
 
 ## Current Position
 
-Phase: 3 of 6 (Wiring del Scorer e Integración Platform) — En progreso
-Plan: 1 of N en Fase 3 (03-01 completo)
-Status: In progress
-Last activity: 2026-07-06 — Completado 03-01-PLAN.md: SingleTransactionScorer cableado frame-v1 por presencia de artefactos; ScoringResult extendido; router propaga calibration_segment/fallback_level/frame_flags; 52 tests PASS
+Phase: 3 of 6 (Wiring del Scorer e Integración Platform) — Fase completa
+Plan: 2 of 2 en Fase 3 (03-02 completo)
+Status: Phase complete — listo para iniciar Fase 4
+Last activity: 2026-07-06 — Completado 03-02-PLAN.md: AlertManager persiste metadata frame-v1 en JSON (PLAT-02); scorable? excluye 'free' (PLAT-03); PLAT-01 reconciliado (scorer autónomo); E2E aprobado por humano
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100% de Fases 0–3 (11/11 planes completados)
 
 ## Performance Metrics
 
@@ -95,8 +95,15 @@ None yet.
 - [03-01]: timezone_missing=True sii facility_id ausente del artefacto (fallback Etc/UTC); nunca timezone_invalid — el scorer nunca lanza excepción de zona.
 - [03-01]: _INSERT_COLUMNS del batch scorer no tocado — DDL ClickHouse anomaly_scores no tiene columnas frame-v1; persistencia batch diferida a Fase 4.
 
+### New Decisions (03-02)
+
+- [03-02]: AlertManager persiste frame-v1 en metadata JSON sin migración — columnas SQL dedicadas diferidas a Fase 4.
+- [03-02]: feature_frame_version mapeado desde score_result['feature_version'] — reusar campo existente en lugar de añadir campo separado al scorer.
+- [03-02]: .compact en build_metadata: nil-safety garantiza retrocompat IF-40 sin condicional explícito.
+- [03-02]: PLAT-01 reconciliado — build_payload intocado; Rails no depende de facility_time_zone_iana; scorer resuelve IANA autónomamente.
+
 ## Session Continuity
 
-Last session: 2026-07-06T17:03:14Z
-Stopped at: Completado 03-01-PLAN.md (SingleTransactionScorer cableado frame-v1 por artefactos; ScoringResult extendido; router propaga 3 campos; 52 tests PASS). Fase 3, plan 03-02 siguiente.
+Last session: 2026-07-06T17:12:14Z
+Stopped at: Completado 03-02-PLAN.md (Fase 3 completa — AlertManager frame-v1; scorable? free; E2E aprobado). Siguiente: Fase 4 shadow/dual-run.
 Resume file: None
