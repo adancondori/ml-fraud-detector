@@ -8,6 +8,7 @@ in test_batch_scorer.py and test_artifact_loader.py.
 Synthetic data: 3 top-k rows (percentile 0.95 / 0.92 / 0.88) and 1 below-p50
 row (percentile 0.30).  p50 resolves to 0.50.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,7 +17,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 # Ensure scripts/ is importable (mirrors shadow_gate/monitor test pattern)
 _SCRIPTS_DIR = str(Path(__file__).resolve().parent.parent / "scripts")
@@ -54,23 +54,25 @@ _COL_NAMES = [
 
 def _make_row(payment_id: str, percentile: float, top_factors: str) -> list:
     return [
-        payment_id,   # payment_id
-        "facility_1", # facility_id
-        "Test Venue", # facility_name
-        "user_1",     # user_id
+        payment_id,  # payment_id
+        "facility_1",  # facility_id
+        "Test Venue",  # facility_name
+        "user_1",  # user_id
         "2026-07-01 10:00:00",  # scored_at
         "2026-07-01 09:55:00",  # payment_created_at
-        42.0,         # amount_usd
-        -0.1,         # raw_score
-        percentile,   # percentile
-        "high",       # risk_level
-        True,         # is_anomaly
+        42.0,  # amount_usd
+        -0.1,  # raw_score
+        percentile,  # percentile
+        "high",  # risk_level
+        True,  # is_anomaly
         "frame-v1-1.0",  # model_version
         top_factors,  # top_factors
     ]
 
 
-_TOP_FACTORS_JSON = json.dumps([{"feature": "amount_usd", "value": 200.0, "z_score": 3.1, "direction": "high"}])
+_TOP_FACTORS_JSON = json.dumps(
+    [{"feature": "amount_usd", "value": 200.0, "z_score": 3.1, "direction": "high"}]
+)
 
 # Three top-k rows (percentile 0.95, 0.92, 0.88) and one below-p50 (0.30)
 _TOP_ROWS = [
@@ -160,9 +162,7 @@ def test_build_queue_filters_shadow_new():
 
     for call in client.query.call_args_list:
         sql = call.args[0]
-        assert "scoring_mode = 'shadow_new'" in sql, (
-            f"SQL missing shadow_new filter: {sql}"
-        )
+        assert "scoring_mode = 'shadow_new'" in sql, f"SQL missing shadow_new filter: {sql}"
 
 
 def test_build_queue_top_k_ordered():
@@ -222,7 +222,7 @@ def test_build_queue_includes_top_factors():
 def test_build_queue_capacity_mode():
     """With capacity=5, pct=0.20: top_k_count=4, below=1."""
     client = _make_mock_client()
-    df = build_hitl_queue(client, top_k=100, below_p50_pct=0.20, capacity=5)
+    build_hitl_queue(client, top_k=100, below_p50_pct=0.20, capacity=5)
 
     # Verify the LIMIT in the top-k SQL is 4 (floor(5*0.80))
     top_k_sql = next(
