@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 2 — Calibracion Segmentada y Contrato API
+**Current focus:** Fase 3 — Wiring del Scorer e Integración Platform
 
 ## Current Position
 
-Phase: 2 of 6 (Calibracion Segmentada y Contrato API) — En progreso
-Plan: 3 of N en Fase 2 (02-01, 02-02 y 02-03 completos)
+Phase: 3 of 6 (Wiring del Scorer e Integración Platform) — En progreso
+Plan: 1 of N en Fase 3 (03-01 completo)
 Status: In progress
-Last activity: 2026-07-06 — Completado 02-03-PLAN.md: Artifacts extendido con facility_stats/thresholds_segmented (Optional=None para IF-40), model_metadata_frame_v1.json completado, feature_list_frame_v1.json generado, ScoreRequest/FrameFlags/ScoreResponse frame-v1 (25 tests PASS)
+Last activity: 2026-07-06 — Completado 03-01-PLAN.md: SingleTransactionScorer cableado frame-v1 por presencia de artefactos; ScoringResult extendido; router propaga calibration_segment/fallback_level/frame_flags; 52 tests PASS
 
-Progress: [████████░░] 80%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -59,7 +59,7 @@ Recent decisions affecting current work:
 - [02-01]: USD incluido siempre como garantía, independientemente del umbral de n en train.
 - [02-01]: facility_stats_v1.json commiteado con git add -f (gitignored) para reproducibilidad; min_currency_n_threshold incluido en artefacto como campo autodescriptivo.
 - [02-02]: LUT global 1001pts / segmento 201pts — consistencia con thresholds_v2.json y JSON compacto (~28MB vs ~140MB con 1001pts).
-- [02-02]: SegmentedThresholdClassifier NO conectado a scorer.py (re-cableado es Fase 3); ThresholdClassifier IF-40 intacto.
+- [02-02]: SegmentedThresholdClassifier conectado a scorer.py en 03-01 (dispatch por presencia de artefactos); ThresholdClassifier IF-40 intacto.
 - [02-02]: Guardrail [0.040, 0.048] en script offline para detectar mezcla IF-40/frame-v1; global p95=0.04359 PASS.
 - [02-02]: by_currency=17 entries: MXN (n=88) e INR (n=2) excluidas (< MIN_N=200); todas las entries tienen n≥200.
 - [02-02]: thresholds_segmented_v1.json commiteado con git add -f (gitignored); 452 facilities, 17 monedas, schema_version='thresholds-segmented-v1'.
@@ -84,11 +84,19 @@ None yet.
 
 - **[RESUELTO - 00-01]** Bugs de `getattr` corregidos: scorer RT ahora usa 689 facility means y 81 combinaciones (role, currency). Delta scores vs pre-fix: facility_avg_amount mean delta=1498 USD, max=259006 USD. Baseline congelado (00-03) DEBE ser post-fix.
 - **[RESUELTO - 02-02]** El min-n para calibración segmentada (100 vs 200): MIN_N=200 confirmado; 452 facilities y 17 monedas lo cumplen sobre val set (1.13M filas).
-- **[Pre-Fase 3]** La extensión del payload Rails (`facility_time_zone_iana`) tiene su propio lead time — confirmar disponibilidad antes de activar Fase 4.
+- **[RESUELTO - 03-01]** PLAT-01 eliminado: scorer resuelve IANA autónomamente desde facility_stats_v1.json; Rails NO necesita enviar facility_time_zone_iana.
+- **[Pre-Fase 4]** La extensión del payload Rails (`facility_time_zone_iana`) tiene su propio lead time — confirmar disponibilidad antes de activar Fase 4.
 - **[Pre-Fase 5]** Capacidad de revisión del equipo HITL desconocida — confirmar antes de Fase 5 (afecta el ratio 80/20 top-k vs random).
+
+### New Decisions (03-01)
+
+- [03-01]: Dispatch por presencia de artefactos (facility_stats is not None AND thresholds_segmented is not None), no por len(feature_names)==30. _is_frame_v1 flag governa todo el path.
+- [03-01]: frame_flags es dict en ScoringResult (no Pydantic); FrameFlags(**dict) se construye solo en el router. Permite usar ScoringResult sin FastAPI.
+- [03-01]: timezone_missing=True sii facility_id ausente del artefacto (fallback Etc/UTC); nunca timezone_invalid — el scorer nunca lanza excepción de zona.
+- [03-01]: _INSERT_COLUMNS del batch scorer no tocado — DDL ClickHouse anomaly_scores no tiene columnas frame-v1; persistencia batch diferida a Fase 4.
 
 ## Session Continuity
 
-Last session: 2026-07-06T14:29:00Z
-Stopped at: Completado 02-03-PLAN.md (Artifacts extendido, model_metadata_frame_v1.json completado, ScoreRequest/FrameFlags/ScoreResponse, 25 tests PASS). Fase 2, plan 02-04 siguiente (si existe) o Fase 3.
+Last session: 2026-07-06T17:03:14Z
+Stopped at: Completado 03-01-PLAN.md (SingleTransactionScorer cableado frame-v1 por artefactos; ScoringResult extendido; router propaga 3 campos; 52 tests PASS). Fase 3, plan 03-02 siguiente.
 Resume file: None
