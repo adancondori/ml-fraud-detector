@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 2 of 6 (Calibracion Segmentada y Contrato API) — En progreso
-Plan: 2 of N en Fase 2 (02-01 y 02-02 completos)
+Plan: 3 of N en Fase 2 (02-01, 02-02 y 02-03 completos)
 Status: In progress
-Last activity: 2026-07-06 — Completado 02-02-PLAN.md: SegmentedThresholdCalibrator+Classifier, thresholds_segmented_v1.json materializado (452 facilities, 17 monedas, p95=0.04359), 26 tests TDD PASS
+Last activity: 2026-07-06 — Completado 02-03-PLAN.md: Artifacts extendido con facility_stats/thresholds_segmented (Optional=None para IF-40), model_metadata_frame_v1.json completado, feature_list_frame_v1.json generado, ScoreRequest/FrameFlags/ScoreResponse frame-v1 (25 tests PASS)
 
 Progress: [████████░░] 80%
 
@@ -63,6 +63,10 @@ Recent decisions affecting current work:
 - [02-02]: Guardrail [0.040, 0.048] en script offline para detectar mezcla IF-40/frame-v1; global p95=0.04359 PASS.
 - [02-02]: by_currency=17 entries: MXN (n=88) e INR (n=2) excluidas (< MIN_N=200); todas las entries tienen n≥200.
 - [02-02]: thresholds_segmented_v1.json commiteado con git add -f (gitignored); 452 facilities, 17 monedas, schema_version='thresholds-segmented-v1'.
+- [02-03]: currency: Optional[str]=None (no ="USD") — ausencia de moneda es observable, no silenciada. IF-40 scorer usa payment.get("currency","USD") → None or "USD" = backward compat.
+- [02-03]: facility_time_zone_iana: Optional[str]=None (nunca ="UTC") — UTC default reintroduciría el sesgo off-hours que el proyecto corrige.
+- [02-03]: Artifacts.facility_stats y .thresholds_segmented como campos opcionales trailing (None=legacy IF-40); _validate_artifacts sin cambios.
+- [02-03]: Tests frame-v1 en test_artifact_loader.py usan tmp_path con model_metadata.json renombrado para evitar conflicto con IF-40 en output/models.
 - [01-01]: validate_universe_filter(stats, sample_df, tz_df) recibe tz_df como 3er arg para assert len(facilities)==tz_df.facility_id.nunique()==1876.
 - [01-02]: currency_original separado de currency en FrameV1FeatureCalculator: staff stats aprendidos con moneda original como key (no USD) — lookup usa (role, currency_original).
 - [01-02]: Sentinel -1.0 en UserContext para time_since_last_txn/credit_flow_ratio/category_entropy_30d: -1.0 = derivar de otros campos; >=0 = usar directamente.
@@ -85,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T14:23:21Z
-Stopped at: Completado 02-02-PLAN.md (SegmentedThresholdCalibrator+Classifier, thresholds_segmented_v1.json materializado, 26 tests PASS). Fase 2, plan 02-03 siguiente.
+Last session: 2026-07-06T14:29:00Z
+Stopped at: Completado 02-03-PLAN.md (Artifacts extendido, model_metadata_frame_v1.json completado, ScoreRequest/FrameFlags/ScoreResponse, 25 tests PASS). Fase 2, plan 02-04 siguiente (si existe) o Fase 3.
 Resume file: None
