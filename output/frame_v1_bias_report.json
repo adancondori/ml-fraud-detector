@@ -1,5 +1,5 @@
 {
-  "top5_amount_ratio": 7.171294,
+  "top5_amount_ratio": 7.614352,
   "gate1_pass": false,
   "gate1_criterion": "top5_amount_ratio < 4.0",
   "off_hours_local_pct": 0.064626,
@@ -9,7 +9,7 @@
   "baseline_top5": 11.79,
   "baseline_offhours_utc": 0.2978,
   "n_val_rows": 1130117,
-  "built_at": "2026-07-06T06:22:26.821118+00:00",
+  "built_at": "2026-07-06T12:44:59.587192+00:00",
   "auc_note": "AUC vs pure_fraud NO evaluado aqu\u00ed \u2014 diagn\u00f3stico circular, no gate. Ver baseline_v0.json para clasificaci\u00f3n diagnostic_circular_not_a_gate_metric.",
   "debug_if_gate_fails": "Si un gate falla: correr ./venv/bin/python -m pytest tests/test_parity_phase1.py -q para verificar que las features de marco est\u00e1n bien computadas v\u00eda el calculator de 01-02. Revisar tambi\u00e9n currency_fallbacks del artefacto facility_stats_v1.json (01-01). Research open question 3: si top5_amount_ratio > 4x, considerar ablaci\u00f3n (a\u00f1adir amount_fac_z \u2014 research open question 1).",
   "methodology": "no_supervisado: modelo entrena SIN etiquetas; proxy SOLO para diagn\u00f3stico"
