@@ -1,0 +1,130 @@
+{
+  "baseline_version": "v0",
+  "frozen_at": "2026-07-06T05:20:40.650943+00:00",
+  "scorer_model": "IF-40-v1",
+  "feature_set": "FS-frame-operational-v1",
+  "feature_list_source": "output/models/final_feature_list_operational.json",
+  "feature_count": 39,
+  "threshold_artifact": "thresholds_v2.json",
+  "threshold_source": "percentile_95_validation_set",
+  "threshold_value": 0.024223975402714343,
+  "gate_metric": "bias_reduction",
+  "gate_criteria": {
+    "top5pct_amount_ratio_target": "<4x",
+    "off_hours_rate_local_target": "~4-5%",
+    "notes": "AUC vs pure_fraud es diagnostico circular — NO usar como gate. 4 features del modelo definen el proxy pure_fraud (user_reversal_ratio_30d, user_discount_ratio_30d, user_reversal_count_30d, user_merchandise_ratio_30d). El AUC alto (~0.84) refleja parcialmente esa circularidad, no discriminacion genuina."
+  },
+  "current_metrics_post_fix": {
+    "val_set_size": 1130117,
+    "val_set_tipo_a_count": 68655,
+    "tipo_a_rate_pct": 6.075035,
+    "tipo_a_proxy_note": "Proxy Tipo A = reembolso (totally_refunded | refunded_to_credit). SOLO para diagnostico; el modelo NO entrena con etiquetas. Proxy != fraude: anomalia de reembolso es un indicador indirecto, no causalidad.",
+    "top5pct_amount_ratio": 11.7875,
+    "top5pct_amount_mean_usd": 3685.71,
+    "global_amount_mean_usd": 312.68,
+    "top5pct_cutoff_score": 0.0242239754,
+    "top5pct_count": 56506,
+    "off_hours_rate_utc_pct": 29.7771,
+    "top5pct_off_hours_rate_utc_pct": 39.2135,
+    "off_hours_note": "UTC-based; objetivo local ~4-5% requiere offset de timezone por facility (Fase 1). El ~30% UTC es el punto de partida a reducir.",
+    "top5pct_note": "Ratio actual >4x es el punto de partida; objetivo Fase 1: reducir a <4x con calibracion por facility. No es un valor aceptable, es la linea base.",
+    "auc_tipo_a_val_diagnostic": {
+      "value": 0.4926,
+      "note": "AUC vs Tipo A en val (honest, FS-operational-v1, post-fix). Valor <0.5 refleja que las anomalias del IF no se alinean con reembolsos. DIAGNOSTICO — no criterio de exito."
+    },
+    "auc_pure_fraud_val_diagnostic": {
+      "value": 0.8364,
+      "classification": "diagnostic_circular_not_a_gate_metric",
+      "note": "AUC vs pure_fraud en val. Circularidad: 4 features del modelo derivadas del comportamiento de reembolso definen el proxy pure_fraud. El AUC alto es parcialmente autovalidacion. DIAGNOSTICO — NO es criterio de exito ni de progreso."
+    }
+  },
+  "data_quality_report": {
+    "currency_empty_train": 0,
+    "currency_empty_val": 0,
+    "currency_empty_test": "not_verified_preventive",
+    "currency_empty_note": "0 filas con EMPTY en splits actuales (confirmado en plan 00-02). Fix aplicado preventivamente en loader.py y engineering.py para futuras extracciones ClickHouse.",
+    "capture_delay_seconds_zero_pct": 6.1925,
+    "capture_delay_note": "excluded_from_FS-frame-operational-v1 (train/serve skew)"
+  },
+  "golden_set": {
+    "source": "val_features_enriched.parquet",
+    "n_rows": 14831,
+    "stratified_by": "facility_id",
+    "per_facility_sample": 25,
+    "seed": 42,
+    "facilities_covered": 680,
+    "path": "output/golden_set_v0.parquet",
+    "note": "Reproducible byte-a-byte con seed=42. Incluye columnas para paridad y metricas de sesgo."
+  },
+  "parity_test_result": {
+    "facility_avg_amount_max_delta": 0.0,
+    "staff_amount_zscore_max_delta": 0.0,
+    "n_transactions_tested": 14831,
+    "n_facilities_covered": 680,
+    "tolerance": 1e-06,
+    "status": "PASS",
+    "source": "tests/test_parity_phase0.py (plan 00-01)",
+    "note": "Delta exactamente 0.0 para ambas features porque los stats almacenados son float32 y el path de calculo es identico post-fix."
+  },
+  "bugs_fixed": [
+    {
+      "id": "BUG-01",
+      "file": "src/fraud_detector/scoring/features.py:27",
+      "description": "getattr(fe._groups[4], '_facility_avg', {}) -> acceso directo _facility_avg_amount",
+      "impact": "facility_avg_amount = global mean para TODAS las facilities en scorer RT (689 facilities afectadas)",
+      "plan": "00-01",
+      "commit": "480e5af"
+    },
+    {
+      "id": "BUG-02",
+      "file": "src/fraud_detector/scoring/features.py:28",
+      "description": "getattr(fe._groups[6], '_staff_stats', {}) -> acceso directo _role_currency_stats (clave compuesta tuple)",
+      "impact": "staff_amount_zscore = fallback global para TODOS los roles en scorer RT (81 combinaciones afectadas)",
+      "plan": "00-01",
+      "commit": "480e5af"
+    },
+    {
+      "id": "BUG-03",
+      "file": "src/fraud_detector/scoring/features.py:role_key",
+      "description": "role_key forzaba a 'player' para roles no-staff; corregido a actual_role sin remapeo",
+      "impact": "z-scores incorrectos para ~14% de filas (guest, rental_user, etc.)",
+      "plan": "00-01",
+      "commit": "3b745da"
+    },
+    {
+      "id": "BUG-04",
+      "file": "src/fraud_detector/scoring/features_enriched.py:_capture_delay_seconds",
+      "description": "is pd.NaT vulnerable a strings malformados -> pd.isnull() + try/except",
+      "impact": "ValueError silencioso para timestamps no parseables",
+      "plan": "00-01",
+      "commit": "ab8b1d6"
+    },
+    {
+      "id": "BUG-05",
+      "file": "src/fraud_detector/data/loader.py + features/engineering.py",
+      "description": "currency EMPTY/'' no sanitizada -> reemplazada por USD con warning",
+      "impact": "Preventivo: 0 filas afectadas en splits actuales; protege futuras extracciones ClickHouse",
+      "plan": "00-02",
+      "commit": "70d59e7"
+    }
+  ],
+  "excluded_features": [
+    "capture_delay_seconds"
+  ],
+  "excluded_features_note": {
+    "capture_delay_seconds": "Train/serve skew: valor real en batch (min=-86400s, max=86400s, mean=-52847s, zero_pct=6.2%), ~0 en real-time. AUC flag 0.511 (no informativa para discriminacion en RT). Excluida de FS-frame-operational-v1."
+  },
+  "auc_pure_fraud_classification": "diagnostic_circular_not_a_gate_metric",
+  "methodology_notes": {
+    "approach": "no_supervisado",
+    "language_constraint": "Sin lenguaje causal. Las anomalias muestran asociacion con patrones de reembolso, no causalidad. Usar 'asociacion', 'capacidad discriminativa', nunca 'predice'.",
+    "proxy_note": "El proxy Tipo A (reembolso) es SOLO para diagnostico/evaluacion. El modelo entrena sin etiquetas. Anomalia != fraude."
+  },
+  "artifact_links": {
+    "feature_list": "output/models/final_feature_list_operational.json",
+    "threshold": "output/models/thresholds_v2.json",
+    "golden_set": "output/golden_set_v0.parquet",
+    "parity_tests": "tests/test_parity_phase0.py",
+    "val_scores": "output/scores/if_val_scores_final.npy"
+  }
+}
