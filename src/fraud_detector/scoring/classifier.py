@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,6 +56,11 @@ class ScoringResult:
     model_version: str = "IF-31-v1"
     feature_version: str = "base-31"
     threshold_version: str = "v1"
+    # Fase 3 — populated only in the frame-v1 path; None in IF-40 legacy.
+    # Using dict (not FrameFlags) to avoid coupling classifier to Pydantic.
+    calibration_segment: Optional[str] = None
+    fallback_level: Optional[str] = None
+    frame_flags: Optional[Dict] = None
 
 
 class ThresholdClassifier:
