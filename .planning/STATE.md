@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01 completo; 05-02 pendiente; 05-03 completo)
+**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01, 05-02, 05-03 completos)
 
 ## Current Position
 
 Phase: 5 of 6 (Cola HITL y Captura de Etiquetas)
-Plan: 05-01 y 05-03 completos (2/3); 05-02 pendiente
-Status: In progress — 05-01 completo (HitlQueueQuery Rails: top-k shadow_new + below-p50, TABLE sin FINAL, ENV params, 12 specs TDD verdes); 05-02 pendiente
-Last activity: 2026-07-06 — Completado 05-01-PLAN.md: HitlQueueQuery Rails (packs/anomaly_detection, 3 queries ClickHouse, SCORE_COLUMNS, fallback p50=0.5), 12 specs verdes, suite 156 ejemplos sin regresiones nuevas. Código Rails sin commit (regla 7 — pendiente revisión usuario).
+Plan: 05-01, 05-02 y 05-03 completos (3/3 planes Fase 5)
+Status: Fase 5 completa — 05-02 entregado (migración 20260706193114 6 columnas HITL, HitlLabelForm 4 cats, HitlLabelService enriquece TriageAction, 32 specs TDD verdes). Código Rails SIN commit (regla 7 — pendiente revisión usuario). Endpoint diferido POST-shadow.
+Last activity: 2026-07-06 — Completado 05-02-PLAN.md: migración nullable (reviewer_label, reviewed_at, score_at_label_time, model_version_at_label, reviewer_saw_factors, hitl_queue_source), HitlLabelForm VALID_REVIEWER_LABELS, HitlLabelService (transaction + rollback + Time.current), alias_attribute :reviewer_id, 32 specs TDD verdes. Sin commit Rails (regla 7).
 
-Progress: [██████████] Infraestructura scorer (Fases 0-4 completas); Fase 5: 2/3 planes completos (05-01 Rails, 05-03 Python); 05-02 pendiente
+Progress: [██████████] Infraestructura scorer (Fases 0-4 completas); Fase 5 completa (3/3 planes); HITL infra+service lista; endpoint diferido POST-shadow
 
 ## Performance Metrics
 
@@ -133,8 +133,17 @@ None yet.
 - [05-01]: SCORE_COLUMNS constante compartida entre top_k_sql y below_p50_sql — DRY sin over-engineering.
 - [05-01]: below_k_count mínimo 1 garantizado siempre: [1, ceil].max en modo absoluto; capacity-top_k_count en modo capacity (si top_k_count=0, below_k_count=capacity≥1).
 
+### New Decisions (05-02)
+
+- [05-02]: Timestamp de migración 20260706193114 generado por Rails (bundle exec rails g migration), movido de db/migrate/ raíz al pack conservando el timestamp. db:migrate general bloqueado por conflicto pre-existente (20260617040336 down pero columna existe en BD) — se usa db:migrate:up VERSION= para aplicar selectivamente.
+- [05-02]: reviewer_id NO es columna nueva — alias_attribute :reviewer_id, :performed_by_id en TriageAction. El form/service usa performed_by; la API puede exponer reviewer_id sin migración adicional.
+- [05-02]: reviewed_at con Time.current EN el service (no en el form, no Time.now) — regla timezone platform CLAUDE.md.
+- [05-02]: reviewer_saw_factors TINYINT(1) NOT NULL DEFAULT 0: Rails lo mapea a boolean en lectura (TrueClass/FalseClass). El service escribe 0/1 vía update!; los specs verifican con be(true)/be(false) post-reload.
+- [05-02]: TriageTransitionService.call retorna directamente la TriageAction status_change (auditado: última expresión del bloque transaction). HitlLabelService captura ese retorno con fallback defensivo (reload desde triage_actions.status_change si el retorno no es la status_change esperada).
+- [05-02]: Scope W5 preservado — sin controller ni endpoint HTTP. HitlQueueQuery → HitlLabelService diferido a fase de operación HITL POST-shadow (gate PENDING_DATA Fase 4 activo).
+
 ## Session Continuity
 
-Last session: 2026-07-06T19:35:00Z
-Stopped at: Completado 05-01-PLAN.md — HitlQueueQuery Rails (packs/anomaly_detection), 12 specs TDD verdes, suite 156 ejemplos sin regresiones. Código Rails sin commit (regla 7). Fase 5: 05-01 y 05-03 completos; 05-02 pendiente.
+Last session: 2026-07-06T19:38:59Z
+Stopped at: Completado 05-02-PLAN.md — migración HITL 20260706193114 (6 columnas nullable), HitlLabelForm (4 categorías tesis), HitlLabelService (enriquece TriageAction, transaction+rollback), alias_attribute :reviewer_id, 32 specs TDD verdes. Código Rails SIN commit (regla 7 — pendiente revisión usuario). Fase 5 completa (05-01, 05-02, 05-03).
 Resume file: None
