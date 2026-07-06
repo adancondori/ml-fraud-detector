@@ -12,7 +12,7 @@ El scorer de anomalías de Playbypoint (Isolation Forest sobre transacciones) a�
 
 El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 es la raíz del grafo de dependencias; Fase 2 depende de Fase 1; Fase 3 depende de Fase 2; Fase 4 depende de Fase 3; Fase 5 depende de shadow activo (Fase 4).
 
-- [ ] **Fase 0: Baseline Freeze y Bug Triage** — Corregir bugs activos en producción, fijar gate de sesgo, congelar baseline limpio antes de cualquier medición.
+- [x] **Fase 0: Baseline Freeze y Bug Triage** — Corregir bugs activos en producción, fijar gate de sesgo, congelar baseline limpio antes de cualquier medición.
 - [ ] **Fase 1: Artefacto de Stats y Feature Calculator** — Construir la raíz de dependencias: `facility_stats_v1.json` y `FrameV1FeatureCalculator` con paridad batch↔real-time verificada.
 - [ ] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
 - [ ] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
@@ -34,9 +34,9 @@ El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 
 **Plans**: 3 plans
 
 Plans:
-- [ ] 00-01-PLAN.md — Fix getattr en `scoring/features.py` (acceso directo + lookup por tupla (role,currency)) + fix `pd.NaT` + test de paridad batch↔real-time [Wave 1]
-- [ ] 00-02-PLAN.md — Sanear moneda `"EMPTY"`→USD, materializar `FS-frame-operational-v1` (sin capture_delay), resolver threshold legacy (IF-40 usa val) [Wave 1]
-- [ ] 00-03-PLAN.md — Congelar baseline: set dorado ≥500 pagos, `baseline_v0.json` post-fix, gate de sesgo formal, AUC pure_fraud marcado circular [Wave 2]
+- [x] 00-01-PLAN.md — Fix getattr en `scoring/features.py` (acceso directo + lookup por tupla (role,currency)) + fix `pd.NaT` + test de paridad batch↔real-time [Wave 1]
+- [x] 00-02-PLAN.md — Sanear moneda `"EMPTY"`→USD, materializar `FS-frame-operational-v1` (sin capture_delay), resolver threshold legacy (IF-40 usa val) [Wave 1]
+- [x] 00-03-PLAN.md — Congelar baseline: set dorado ≥500 pagos, `baseline_v0.json` post-fix, gate de sesgo formal, AUC pure_fraud marcado circular [Wave 2]
 
 ### Fase 1: Artefacto de Stats y Feature Calculator
 **Goal**: Existe un artefacto versionado `facility_stats_v1.json` con mediana/IQR/zona-IANA/currency_group/fallback_level por facility, computado sobre el universo exacto del scorer; y un `FrameV1FeatureCalculator` que produce features de marco idénticas en batch y en real-time para el mismo pago.
@@ -123,7 +123,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Baseline Freeze y Bug Triage | 0/3 | Planned | - |
+| 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
 | 1. Artefacto de Stats y Feature Calculator | 0/TBD | Not started | - |
 | 2. Calibración Segmentada y Contrato API | 0/TBD | Not started | - |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |

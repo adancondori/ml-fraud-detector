@@ -9,12 +9,12 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Fundación / corrección de bugs (Fase 0)
 
-- [ ] **BASE-01**: El scorer real-time usa medias/estadísticas per-facility (no globales) — corregir los `getattr` con nombres erróneos en `scoring/features.py:27-28` y añadir aserción post-carga
-- [ ] **BASE-02**: El scorer real-time y el batch producen features idénticas para el mismo pago — test de paridad batch↔real-time como guardrail de regresión
-- [ ] **BASE-03**: Los umbrales operativos se calibran sobre el conjunto de validación, no sobre test
-- [ ] **BASE-04**: `capture_delay_seconds` se excluye del feature set operativo y su bug de check `pd.NaT` queda corregido
-- [ ] **BASE-05**: La moneda `"EMPTY"` se sanea explícitamente (a `"USD"` con flag) en la extracción, con reporte de calidad de datos
-- [ ] **BASE-06**: El gate de éxito del proyecto está fijado como reducción de sesgo (top-5% monto <4×, off-hours local ~4-5%); el AUC contra `pure_fraud` queda marcado como diagnóstico circular, no criterio
+- [x] **BASE-01**: El scorer real-time usa medias/estadísticas per-facility (no globales) — corregir los `getattr` con nombres erróneos en `scoring/features.py:27-28` y añadir aserción post-carga
+- [x] **BASE-02**: El scorer real-time y el batch producen features idénticas para el mismo pago — test de paridad batch↔real-time como guardrail de regresión
+- [x] **BASE-03**: Los umbrales operativos se calibran sobre el conjunto de validación, no sobre test
+- [x] **BASE-04**: `capture_delay_seconds` se excluye del feature set operativo y su bug de check `pd.NaT` queda corregido
+- [x] **BASE-05**: La moneda `"EMPTY"` se sanea explícitamente (a `"USD"` con flag) en la extracción, con reporte de calidad de datos
+- [x] **BASE-06**: El gate de éxito del proyecto está fijado como reducción de sesgo (top-5% monto <4×, off-hours local ~4-5%); el AUC contra `pure_fraud` queda marcado como diagnóstico circular, no criterio
 
 ### Artefacto de stats y features de marco (Fase 1)
 
@@ -81,12 +81,12 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BASE-01 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
-| BASE-02 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
-| BASE-03 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
-| BASE-04 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
-| BASE-05 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
-| BASE-06 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-01 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
+| BASE-02 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
+| BASE-03 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
+| BASE-04 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
+| BASE-05 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
+| BASE-06 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
 | STATS-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
 | STATS-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
 | FRAME-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
