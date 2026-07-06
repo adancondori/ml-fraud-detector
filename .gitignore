@@ -97,6 +97,7 @@ data/external/**/*
 *.csv
 *.tsv
 *.parquet
+!output/golden_set_v0.parquet
 *.feather
 *.h5
 *.hdf5
@@ -339,6 +340,7 @@ gcloud/
 !output/models/model_metadata.json
 !output/models/thresholds_v2.json
 !output/models/final_feature_list_operational.json
+!output/baseline_v0.json
 
 # Azure
 .azure/
