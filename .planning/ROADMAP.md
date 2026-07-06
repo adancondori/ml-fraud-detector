@@ -94,11 +94,11 @@ Plans:
   2. Las queries de monitoreo shadow reportan: alert rate por segmento, sesgo de monto top-5% (ratio champion vs frame-v1), off-hours local vs UTC, y Jaccard@100 entre los top-100 de cada modelo.
   3. Tras ≥2 semanas de shadow data, el gate go/no-go evalúa: top-5% monto ratio <4×, off-hours local ~4–5%, correlación de Spearman del ranking ≥0,90, delta de alert rate ≤2pp entre modelos por segmento. El resultado (go/no-go) queda documentado con evidencia.
   4. El sesgo de monto medido en shadow (top-5% ratio de frame-v1) es materialmente menor que el del champion — confirmando en datos reales la reducción observada en el experimento offline (15,7× → 3,3×).
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: `ShadowDualRunner` — dual-score por pago, persistencia de ambas filas, manejo de fallos parciales
-- [ ] 04-02: Queries de monitoreo shadow y gate go/no-go documentado
+- [ ] 04-01-PLAN.md — `ShadowDualRunner` + migración DDL (3 columnas frame-v1) + `_load_metadata` override + lifespan dual: 2 filas/pago (shadow_old/shadow_new), dedup token prefijado, aislamiento de fallo parcial, retrocompat IF-40 [Wave 1]
+- [ ] 04-02-PLAN.md — `shadow_monitor.py` (SHAD-02, 4 métricas robustas) + `shadow_gate.py` (SHAD-03, guard INSUFFICIENT_DATA <14d/<500 filas) con checkpoint humano diferido PENDING_DATA [Wave 2]
 
 ### Fase 5: Cola HITL y Captura de Etiquetas
 **Goal**: Existe una cola de revisión que exporta el top-k de frame-v1 con `top_factors`; los revisores pueden capturar etiquetas con procedencia completa; el muestreo incluye ≥20% de transacciones no alertadas (bajo p50) para estimar falsos negativos.
@@ -126,5 +126,5 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | 1. Artefacto de Stats y Feature Calculator | 3/3 | ✓ Complete | 2026-07-06 |
 | 2. Calibración Segmentada y Contrato API | 3/3 | ✓ Complete | 2026-07-06 |
 | 3. Wiring del Scorer e Integración Platform | 2/2 | ✓ Complete | 2026-07-06 |
-| 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
+| 4. Shadow Dual-Run y Validación de Sesgo | 0/2 | Planned | - |
 | 5. Cola HITL y Captura de Etiquetas | 0/TBD | Not started | - |
