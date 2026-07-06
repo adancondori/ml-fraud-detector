@@ -12,7 +12,7 @@
   "gate_criteria": {
     "top5pct_amount_ratio_target": "<4x",
     "off_hours_rate_local_target": "~4-5%",
-    "notes": "AUC vs pure_fraud es diagnostico circular — NO usar como gate. 4 features del modelo definen el proxy pure_fraud (user_reversal_ratio_30d, user_discount_ratio_30d, user_reversal_count_30d, user_merchandise_ratio_30d). El AUC alto (~0.84) refleja parcialmente esa circularidad, no discriminacion genuina."
+    "notes": "AUC vs pure_fraud es diagnostico circular — NO usar como gate. 4 features del modelo definen el proxy pure_fraud (same_amount_count_1h, user_account_age_days, user_txn_count_1h, is_third_party_payment). El AUC alto (~0.84) refleja parcialmente esa circularidad, no discriminacion genuina."
   },
   "current_metrics_post_fix": {
     "val_set_size": 1130117,
@@ -36,7 +36,8 @@
       "value": 0.8364,
       "classification": "diagnostic_circular_not_a_gate_metric",
       "note": "AUC vs pure_fraud en val. Circularidad: 4 features del modelo derivadas del comportamiento de reembolso definen el proxy pure_fraud. El AUC alto es parcialmente autovalidacion. DIAGNOSTICO — NO es criterio de exito ni de progreso."
-    }
+    },
+    "top5pct_amount_ratio_note": "Punto de partida POST-fix sobre el set dorado (todas las monedas, val, IF-40 corregido). El ~15.7x del research proviene de otro setup (cohorte USD, feature set V0 contaminado); Fase 1 debe comparar su reduccion de sesgo contra este 11.79x, no contra 15.7x."
   },
   "data_quality_report": {
     "currency_empty_train": 0,
