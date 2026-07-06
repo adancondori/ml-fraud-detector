@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 0 of 6 (Baseline Freeze y Bug Triage)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-07-06 — Roadmap creado; REQUIREMENTS.md traceability confirmada (24/24 requisitos mapeados)
+Plan: 2 of 4 in current phase (00-01 y 00-02 completos)
+Status: In progress
+Last activity: 2026-07-06 — Completado 00-02-PLAN.md: currency EMPTY sanitized, FS-frame-operational-v1 materializado, threshold legacy marcado
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 20%
 
 ## Performance Metrics
 
@@ -45,6 +45,9 @@ Recent decisions affecting current work:
 - [Fase 0]: Gate de éxito = reducción de sesgo (top-5% <4×, off-hours ~4–5%); AUC vs `pure_fraud` es circularidad — diagnóstico, no criterio.
 - [Fase 1]: Modelo global único + calibración segmentada (no un modelo por moneda); stats artifact cargado en memoria para presupuesto de 200ms.
 - [Proyecto]: `capture_delay_seconds` excluido de `FS-frame-operational-v1` (train/serve skew: ~0 en real-time vs valor real en batch; AUC flag 0,511).
+- [00-02]: `thresholds.json` (IF-31) marcado LEGACY_DEPRECATED; scorer operativo IF-40 usa `thresholds_v2.json` (percentile_95_validation_set, 0.024223975402714343) — no tocar.
+- [00-02]: `FS-frame-operational-v1` = `output/models/final_feature_list_operational.json` (39 features, sin capture_delay_seconds). Artefacto autodescriptivo, commiteado en git.
+- [00-02]: Currency EMPTY sanitized en loader.py (_sanitize_currency) y engineering.py; 0 filas afectadas en splits actuales (fix preventivo para Fase 1 facility stats).
 
 ### Pending Todos
 
@@ -59,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06
-Stopped at: Roadmap creado; archivos ROADMAP.md, STATE.md escritos; REQUIREMENTS.md traceability actualizada.
+Last session: 2026-07-06T05:12:34Z
+Stopped at: Completado 00-02-PLAN.md (currency sanitize, FS-frame-operational-v1, threshold legacy).
 Resume file: None
