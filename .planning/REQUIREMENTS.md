@@ -77,22 +77,41 @@ Excluidos explícitamente para prevenir scope creep.
 
 ## Traceability
 
-Poblado durante la creación del roadmap.
+Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BASE-01..06 | Fase 0 | Pending |
-| STATS-01..02, FRAME-01..04 | Fase 1 | Pending |
-| CAL-01..02, API-01..02 | Fase 2 | Pending |
-| PLAT-01..03 | Fase 3 | Pending |
-| SHAD-01..03 | Fase 4 | Pending |
-| HITL-01..03 | Fase 5 | Pending |
+| BASE-01 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-02 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-03 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-04 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-05 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| BASE-06 | Fase 0 — Baseline Freeze y Bug Triage | Pending |
+| STATS-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| STATS-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| FRAME-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| FRAME-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| FRAME-03 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| FRAME-04 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| CAL-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
+| CAL-02 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
+| API-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
+| API-02 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
+| PLAT-01 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
+| PLAT-02 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
+| PLAT-03 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
+| SHAD-01 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
+| SHAD-02 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
+| SHAD-03 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
+| HITL-01 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
+| HITL-02 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
+| HITL-03 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 24 (pendiente confirmación del roadmapper)
+- Mapped to phases: 24/24
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-07-06*
-*Last updated: 2026-07-06 after initial definition*
+*Last updated: 2026-07-06 — traceability confirmada por roadmapper*
