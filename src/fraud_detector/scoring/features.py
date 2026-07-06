@@ -24,11 +24,22 @@ class SingleFeatureCalculator:
         fe = joblib.load(feature_engineer_path)
         # Extract learned parameters from FeatureGroups
         self._global_avg_amount = fe._groups[0]._global_avg_amount
-        self._facility_avgs = getattr(fe._groups[4], "_facility_avg", {})
-        self._staff_stats = getattr(fe._groups[6], "_staff_stats", {})
+        self._facility_avgs = fe._groups[4]._facility_avg_amount
+        self._staff_stats = fe._groups[6]._role_currency_stats
+        self._staff_currency_stats = fe._groups[6]._currency_stats
+        self._staff_global_mean = fe._groups[6]._global_mean
+        self._staff_global_std = fe._groups[6]._global_std
+        assert len(self._facility_avgs) > 0, (
+            f"_facility_avg_amount vacío (grupo={type(fe._groups[4]).__name__}) — "
+            "artefacto corrupto o nombre de atributo incorrecto"
+        )
+        assert len(self._staff_stats) > 0, (
+            f"_role_currency_stats vacío (grupo={type(fe._groups[6]).__name__}) — "
+            "artefacto corrupto o nombre de atributo incorrecto"
+        )
         logger.info(
             f"SingleFeatureCalculator loaded: global_avg={self._global_avg_amount:.2f}, "
-            f"facilities={len(self._facility_avgs)}, staff_roles={len(self._staff_stats)}"
+            f"facilities={len(self._facility_avgs)}, staff_role_currency={len(self._staff_stats)}"
         )
 
     def calculate(self, payment: Dict, context: UserContext) -> np.ndarray:
@@ -54,8 +65,18 @@ class SingleFeatureCalculator:
         facility_avg = self._facility_avgs.get(fid, self._global_avg_amount)
         is_staff = context.user_role in ("court_manager", "court_operator", "teacher")
         role_key = context.user_role if is_staff else "player"
-        staff_mean = self._staff_stats.get(role_key, {}).get("mean", self._global_avg_amount)
-        staff_std = self._staff_stats.get(role_key, {}).get("std", 1.0)
+        currency = (payment.get("currency") or "USD").upper()
+        currency_key = (role_key, currency)
+        if currency_key in self._staff_stats:
+            _s = self._staff_stats[currency_key]
+        elif (role_key, "USD") in self._staff_stats:
+            _s = self._staff_stats[(role_key, "USD")]
+        elif currency in self._staff_currency_stats:
+            _s = self._staff_currency_stats[currency]
+        else:
+            _s = {"mean": self._staff_global_mean, "std": self._staff_global_std}
+        staff_mean = _s["mean"]
+        staff_std = _s["std"] or 1.0
 
         # time_since_last_txn
         if context.last_txn_at is not None:
