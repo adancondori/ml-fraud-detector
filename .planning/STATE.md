@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01, 05-02 pendientes; 05-03 completo)
+**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01 completo; 05-02 pendiente; 05-03 completo)
 
 ## Current Position
 
 Phase: 5 of 6 (Cola HITL y Captura de Etiquetas)
-Plan: 3 of 3 en Fase 5 (05-03 completo; 05-01 y 05-02 pendientes de ejecución)
-Status: In progress — 05-03 completo (hitl_queue_builder.py + 12 tests + metodología FN); 05-01/05-02 pendientes
-Last activity: 2026-07-06 — Completado 05-03-PLAN.md: hitl_queue_builder.py (exportador operativo HITL-01, compute_counts, resolve_p50, build_hitl_queue, write_output), 12 tests verdes con ClickHouse mockeado, docs/hitl_false_negative_methodology.md.
+Plan: 05-01 y 05-03 completos (2/3); 05-02 pendiente
+Status: In progress — 05-01 completo (HitlQueueQuery Rails: top-k shadow_new + below-p50, TABLE sin FINAL, ENV params, 12 specs TDD verdes); 05-02 pendiente
+Last activity: 2026-07-06 — Completado 05-01-PLAN.md: HitlQueueQuery Rails (packs/anomaly_detection, 3 queries ClickHouse, SCORE_COLUMNS, fallback p50=0.5), 12 specs verdes, suite 156 ejemplos sin regresiones nuevas. Código Rails sin commit (regla 7 — pendiente revisión usuario).
 
-Progress: [██████████] Infraestructura scorer (Fases 0-5.03 completas); 05-01/05-02 por ejecutar
+Progress: [██████████] Infraestructura scorer (Fases 0-4 completas); Fase 5: 2/3 planes completos (05-01 Rails, 05-03 Python); 05-02 pendiente
 
 ## Performance Metrics
 
@@ -125,8 +125,16 @@ None yet.
 - [05-03]: hitl_queue_builder.py es OPERATIVO (ClickHouse live) — no unificado con hitl_export_alerts.py/hitl_ingest_labels.py (pipeline offline/parquet). Solo reutiliza vocabulario VALID_CATEGORIES.
 - [05-03]: ENV vars para parámetros operativos: HITL_TOP_K (default 100), HITL_BELOW_P50_PCT (default 0.20); CLI args los sobreescriben.
 
+### New Decisions (05-01)
+
+- [05-01]: TABLE default SIN FINAL — idéntico a los 12 queries del pack (auditado). El FINAL lo aporta el ENV del operador en producción/staging; el código nunca hardcodea FINAL.
+- [05-01]: stub_const TABLE para test FINAL — más robusto que depender del ENV del desarrollador en test; sobrevive a la evaluación del constante al momento de require.
+- [05-01]: 3 queries separadas (p50, top-k, below-p50) — legibilidad y aislamiento de fallos; fallback p50=0.5 si ClickHouse falla en la query p50.
+- [05-01]: SCORE_COLUMNS constante compartida entre top_k_sql y below_p50_sql — DRY sin over-engineering.
+- [05-01]: below_k_count mínimo 1 garantizado siempre: [1, ceil].max en modo absoluto; capacity-top_k_count en modo capacity (si top_k_count=0, below_k_count=capacity≥1).
+
 ## Session Continuity
 
-Last session: 2026-07-06T19:34:41Z
-Stopped at: Completado 05-03-PLAN.md — hitl_queue_builder.py (exportador operativo HITL-01, 12 tests verdes, docs/hitl_false_negative_methodology.md). Fase 5 en progreso: faltan 05-01 (HitlQueueQuery Rails) y 05-02 (HitlLabelForm).
+Last session: 2026-07-06T19:35:00Z
+Stopped at: Completado 05-01-PLAN.md — HitlQueueQuery Rails (packs/anomaly_detection), 12 specs TDD verdes, suite 156 ejemplos sin regresiones. Código Rails sin commit (regla 7). Fase 5: 05-01 y 05-03 completos; 05-02 pendiente.
 Resume file: None
