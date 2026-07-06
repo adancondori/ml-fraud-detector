@@ -14,7 +14,7 @@ Plan: 2 of 2 en Fase 4 (04-02 código completo — checkpoint PENDING_DATA)
 Status: PENDING_DATA — 04-02 código entregado (shadow_monitor.py + shadow_gate.py, 31 tests verdes); gate real diferido hasta ≥2 semanas de shadow data; checkpoint Task 3 en espera
 Last activity: 2026-07-06 — Completado 04-02-PLAN.md (Tasks 1+2): shadow_monitor.py (4 métricas robustas), shadow_gate.py (guard INSUFFICIENT_DATA, Spearman scipy, exit 0/1/2), 31 tests. Checkpoint PENDING_DATA pausado.
 
-Progress: [█████████░] ~96% de Fases 0–4 (13/14 planes — 04-02 código completo, checkpoint diferido)
+Progress: [██████████] 100% de infraestructura (Fases 0-4, 13/13 planes); Fase 5 HITL pendiente
 
 ## Performance Metrics
 

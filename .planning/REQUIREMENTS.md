@@ -40,9 +40,9 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Shadow mode y validación (Fase 4)
 
-- [ ] **SHAD-01**: El scorer puntúa cada pago con ambos modelos (actual y frame-v1) y persiste ambas filas con `model_version` distinto
-- [ ] **SHAD-02**: Existen queries de monitoreo shadow: alert rate por segmento, sesgo de monto (top-5%), off-hours local vs UTC, Jaccard@100
-- [ ] **SHAD-03**: Se evalúa un gate go/no-go de promoción contra objetivos de reducción de sesgo sobre datos shadow
+- [x] **SHAD-01**: El scorer puntúa cada pago con ambos modelos (actual y frame-v1) y persiste ambas filas con `model_version` distinto
+- [x] **SHAD-02**: Existen queries de monitoreo shadow: alert rate por segmento, sesgo de monto (top-5%), off-hours local vs UTC, Jaccard@100
+- [x] **SHAD-03**: Se evalúa un gate go/no-go de promoción contra objetivos de reducción de sesgo sobre datos shadow
 
 ### Human-in-the-loop (Fase 5)
 
@@ -100,9 +100,9 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 | PLAT-01 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
 | PLAT-02 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
 | PLAT-03 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
-| SHAD-01 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
-| SHAD-02 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
-| SHAD-03 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
+| SHAD-01 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
+| SHAD-02 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
+| SHAD-03 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
 | HITL-01 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
 | HITL-02 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
 | HITL-03 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
