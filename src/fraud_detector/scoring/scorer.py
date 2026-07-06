@@ -43,12 +43,39 @@ class SingleTransactionScorer:
         ch_connector=None,
         artifacts=None,
     ):
+        self._is_frame_v1 = False
         if artifacts is not None:
             self._model = artifacts.model
             self._scaler = artifacts.scaler
             self._feature_names = list(artifacts.feature_list)
             self._metadata = dict(artifacts.metadata)
-            self._classifier = ThresholdClassifier(config=artifacts.thresholds)
+
+            # Dispatch by artifact presence (not by feature count — see Pitfall 1).
+            # frame-v1 path requires both facility_stats and thresholds_segmented.
+            if (
+                getattr(artifacts, "facility_stats", None) is not None
+                and getattr(artifacts, "thresholds_segmented", None) is not None
+            ):
+                from fraud_detector.scoring.features_frame_v1 import FrameV1FeatureCalculator
+                from fraud_detector.scoring.classifier import SegmentedThresholdClassifier
+
+                self._feature_calc = FrameV1FeatureCalculator(
+                    facility_stats=artifacts.facility_stats,
+                    feature_engineer_path=feature_engineer_path,
+                )
+                self._classifier = SegmentedThresholdClassifier(artifacts.thresholds_segmented)
+                self._is_frame_v1 = True
+            elif len(self._feature_names) == 40:
+                # IF-40 legacy path
+                self._feature_calc = EnrichedFeatureCalculator(
+                    feature_engineer_path=feature_engineer_path,
+                    feature_list=self._feature_names,
+                )
+                self._classifier = ThresholdClassifier(config=artifacts.thresholds)
+            else:
+                # Legacy base-31 path
+                self._feature_calc = SingleFeatureCalculator(feature_engineer_path)
+                self._classifier = ThresholdClassifier(config=artifacts.thresholds)
         else:
             self._model = joblib.load(model_path)
             self._scaler = joblib.load(scaler_path)
@@ -60,13 +87,6 @@ class SingleTransactionScorer:
                 "threshold_version": "v1",
             }
             self._classifier = ThresholdClassifier(thresholds_path)
-
-        if len(self._feature_names) == 40:
-            self._feature_calc = EnrichedFeatureCalculator(
-                feature_engineer_path=feature_engineer_path,
-                feature_list=self._feature_names,
-            )
-        else:
             self._feature_calc = SingleFeatureCalculator(feature_engineer_path)
 
         self._context_provider = UserContextProvider(ch_connector)
@@ -113,7 +133,31 @@ class SingleTransactionScorer:
 
         raw_score, X_scaled = self.score_features(features)
 
-        is_anomaly, risk_level, percentile = self._classifier.classify(raw_score)
+        # 3. Classify: frame-v1 uses SegmentedThresholdClassifier (5-tuple);
+        #    legacy uses ThresholdClassifier (3-tuple).
+        calibration_segment = None
+        fallback_level = None
+        frame_flags = None
+
+        if self._is_frame_v1:
+            facility_id = int(payment.get("facility_id", 0))
+            currency = (payment.get("currency") or "USD").upper()
+            is_anomaly, risk_level, percentile, fallback_level, calibration_segment = (
+                self._classifier.classify(
+                    raw_score, facility_id=facility_id, currency=currency
+                )
+            )
+            # Build observability flags — timezone_missing when the facility is absent
+            # from the artifact (fallback to Etc/UTC was used in _lookup_facility).
+            fid_str = str(facility_id)
+            tz_missing = self._feature_calc._stats["facilities"].get(fid_str) is None
+            frame_flags = {
+                "timezone_missing": bool(tz_missing),
+                "currency_missing": payment.get("currency") is None,
+                "currency_unknown": False,
+            }
+        else:
+            is_anomaly, risk_level, percentile = self._classifier.classify(raw_score)
 
         factors = self._explain_top_factors(
             features,
@@ -131,6 +175,9 @@ class SingleTransactionScorer:
             model_version=self._model_version,
             feature_version=self._feature_version,
             threshold_version=self._threshold_version,
+            calibration_segment=calibration_segment,
+            fallback_level=fallback_level,
+            frame_flags=frame_flags,
         )
 
     def score_features(self, features: np.ndarray) -> tuple[float, np.ndarray]:

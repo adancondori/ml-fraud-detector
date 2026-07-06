@@ -52,24 +52,21 @@ def _make_frame_v1_dir(tmp_path: Path) -> Path:
 def _make_minimal_context() -> UserContext:
     """Return a UserContext with safe zero-values for frame-v1 calculate()."""
     return UserContext(
-        user_id=1,
-        facility_id=10,
         txn_count_1h=0,
         txn_count_24h=0,
         amount_24h=0.0,
         last_txn_at=None,
-        time_since_last_txn=0.0,
+        time_since_last_txn=0.0,  # >= 0 → used directly
         distinct_facilities_30d=1,
         distinct_methods=1,
         reversal_ratio_30d=0.0,
-        account_age_days=30,
         discount_ratio_30d=0.0,
         debit_count_30d=0,
         debit_amount_30d=0.0,
         prepaid_spend_30d=0.0,
-        credit_flow_ratio=0.0,
+        credit_flow_ratio=0.0,  # >= 0 → used directly
         categories_30d=[],
-        category_entropy_30d=0.0,
+        category_entropy_30d=0.0,  # >= 0 → used directly
         reversal_count_30d=0,
         merchandise_ratio_30d=0.0,
         gateway_change_recent=0,
@@ -266,36 +263,33 @@ class TestDispatch:
             artifacts=artifacts,
         )
 
-        # IF-40 scorer uses EnrichedFeatureCalculator; context is fetched from CH by default.
-        # We mock the context provider to avoid needing a real CH connection.
-        ctx = MagicMock()
-        ctx.user_id = 1
-        ctx.facility_id = 10
-        ctx.txn_count_1h = 0
-        ctx.txn_count_24h = 0
-        ctx.amount_24h = 100.0
-        ctx.last_txn_at = None
-        ctx.time_since_last_txn = 0.0
-        ctx.distinct_facilities_30d = 1
-        ctx.distinct_methods = 1
-        ctx.reversal_ratio_30d = 0.0
-        ctx.account_age_days = 30
-        ctx.discount_ratio_30d = 0.0
-        ctx.debit_count_30d = 0
-        ctx.debit_amount_30d = 0.0
-        ctx.prepaid_spend_30d = 0.0
-        ctx.credit_flow_ratio = -1.0
-        ctx.categories_30d = []
-        ctx.category_entropy_30d = -1.0
-        ctx.reversal_count_30d = 0
-        ctx.merchandise_ratio_30d = 0.0
-        ctx.gateway_change_recent = 0
-        ctx.is_main_gateway = 1
-        ctx.is_first_gateway_for_user = 0
-        ctx.source_change_recent = 0
-        ctx.user_role = "player"
-        ctx.facility_avg_amount = 100.0
-        ctx.is_third_party_payment = 0
+        # IF-40 scorer uses EnrichedFeatureCalculator; provide a UserContext
+        # with the fields it needs (facility_avg_amount, is_third_party_payment).
+        ctx = UserContext(
+            txn_count_1h=0,
+            txn_count_24h=0,
+            amount_24h=100.0,
+            last_txn_at=None,
+            time_since_last_txn=-1.0,
+            distinct_facilities_30d=1,
+            distinct_methods=1,
+            reversal_ratio_30d=0.0,
+            discount_ratio_30d=0.0,
+            debit_count_30d=0,
+            debit_amount_30d=0.0,
+            prepaid_spend_30d=0.0,
+            credit_flow_ratio=-1.0,
+            categories_30d=[],
+            category_entropy_30d=-1.0,
+            reversal_count_30d=0,
+            merchandise_ratio_30d=0.0,
+            gateway_change_recent=0,
+            is_main_gateway=1,
+            is_first_gateway_for_user=0,
+            source_change_recent=0,
+            user_role="player",
+            is_third_party_payment=0,
+        )
 
         payment = {
             "payment_id": 1,
