@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 
 ## Current Position
 
-Phase: 0 of 6 (Baseline Freeze y Bug Triage) — COMPLETA
-Plan: 3 of 3 en Fase 0 (00-01, 00-02, 00-03 completos)
-Status: Fase 0 completa — lista para iniciar Fase 1
-Last activity: 2026-07-06 — Completado 00-03-PLAN.md: golden set congelado, baseline_v0.json materializado, gate de sesgo formal, checkpoint humano aprobado
+Phase: 1 of 6 (Artefacto de Stats y Feature Calculator) — En progreso
+Plan: 1 of 3 en Fase 1 (01-01 completo; 01-02, 01-03 pendientes)
+Status: En progreso — 01-01 completo, iniciando 01-02
+Last activity: 2026-07-06 — Completado 01-01-PLAN.md: facility_stats_v1.json materializado, 1876 facilities con iana_tz, fallback chain, IQR guard
 
-Progress: [███░░░░░░░] 30%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -52,6 +52,10 @@ Recent decisions affecting current work:
 - [00-02]: `thresholds.json` (IF-31) marcado LEGACY_DEPRECATED; scorer operativo IF-40 usa `thresholds_v2.json` (percentile_95_validation_set, 0.024223975402714343) — no tocar.
 - [00-02]: `FS-frame-operational-v1` = `output/models/final_feature_list_operational.json` (39 features, sin capture_delay_seconds). Artefacto autodescriptivo, commiteado en git.
 - [00-02]: Currency EMPTY sanitized en loader.py (_sanitize_currency) y engineering.py; 0 filas afectadas en splits actuales (fix preventivo para Fase 1 facility stats).
+- [01-01]: iqr_guarded = max(iqr, 1.0) no max(iqr, 1e-6) — floor significativo para distribuciones near-uniform; almacenado en artefacto para uso en fórmula z-score.
+- [01-01]: facility_stats_v1.json itera tz_map (1876) no train_df.groupby (689) — garantiza iana_tz en todas las facilities para el path RT; 580 facility / 1289 currency / 7 global.
+- [01-01]: currency_fallbacks para USD, CAD, MYR, HNL, NIO (top-5 frecuencia en train); 7 facilities caen a global.
+- [01-01]: validate_universe_filter(stats, sample_df, tz_df) recibe tz_df como 3er arg para assert len(facilities)==tz_df.facility_id.nunique()==1876.
 
 ### Pending Todos
 
@@ -66,6 +70,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T05:24:50Z
-Stopped at: Completado 00-03-PLAN.md (golden set, baseline_v0.json congelado, checkpoint humano aprobado). Fase 0 completa.
+Last session: 2026-07-06T06:01:46Z
+Stopped at: Completado 01-01-PLAN.md (facility_stats_v1.json materializado, 1876 facilities, 22 tests verdes). Iniciando 01-02.
 Resume file: None
