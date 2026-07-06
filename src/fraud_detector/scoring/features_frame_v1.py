@@ -127,33 +127,25 @@ class FrameV1FeatureCalculator:
     def _lookup_facility(self, fid: int) -> Tuple[float, float, float, str]:
         """Retorna (fmean, fmedian, iqr_guarded, iana_tz) con fallback chain.
 
-        Orden: facility (n>=30) → currency → global.
-        iana_tz siempre disponible (1876 facilities en el artefacto).
+        Orden: facility (n>=30) → currency-fallback stats → global stats.
+        iana_tz siempre disponible: todas las 1876 facilities tienen entrada en el
+        artefacto con iana_tz. Para facilities desconocidas se usa "Etc/UTC".
         """
         fid_str = str(fid)
         entry = self._stats["facilities"].get(fid_str)
+        iana_tz = entry.get("iana_tz", "Etc/UTC") if entry is not None else "Etc/UTC"
 
         if entry is not None:
-            iana_tz = entry.get("iana_tz", "Etc/UTC")
-            if entry.get("fallback_level") == "facility":
-                fmean = float(entry["mean"])
-                fmedian = float(entry["median"])
-                iqr_guarded = float(entry["iqr_guarded"])
-                return fmean, fmedian, iqr_guarded, iana_tz
-            # Currency fallback — tiene iana_tz del artefacto pero stats de moneda
-            # Buscar currency stats; si la facility tiene currency en el fallback, usarla.
-            # Intentar inferir currency del entry (si fue construido con stats de moneda)
             fmean = float(entry.get("mean") or 0)
             fmedian = float(entry.get("median") or 0)
             iqr_guarded = float(entry.get("iqr_guarded") or 1.0)
             if fmean > 0:
+                # Cubre tanto fallback_level=facility como fallback_level=currency
+                # (ambos tienen mean positivo en el artefacto)
                 return fmean, fmedian, iqr_guarded, iana_tz
 
-        # Fallback: usar global (facility desconocida)
+        # Fallback global: facility desconocida o mean==0 (raro)
         g = self._stats["global_fallback"]
-        iana_tz = "Etc/UTC"
-        if entry is not None:
-            iana_tz = entry.get("iana_tz", "Etc/UTC")
         return (
             float(g["mean"]),
             float(g["median"]),
