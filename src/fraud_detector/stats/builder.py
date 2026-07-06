@@ -22,8 +22,9 @@ import pandas as pd
 
 from fraud_detector.stats.tz_mapping import resolve_iana
 
-# Number of most-frequent currencies for which to build dedicated fallback stats.
-_N_CURRENCY_FALLBACKS = 5
+# Minimum number of train rows required for a currency to get dedicated fallback stats.
+# Currencies below this threshold fall back to global (not per-currency) stats.
+_MIN_CURRENCY_N = 1_000  # monedas con menos rows en train caen a global
 
 
 class FacilityStatsBuilder:
@@ -63,17 +64,18 @@ class FacilityStatsBuilder:
         # --- Global fallback (computed over all train rows) ---
         global_fallback = self._compute_global_fallback(train_df)
 
-        # --- Currency fallbacks for top-N currencies ---
-        top_currencies = (
-            train_df["currency"]
-            .value_counts()
-            .head(_N_CURRENCY_FALLBACKS)
+        # --- Currency fallbacks for all currencies with n >= _MIN_CURRENCY_N in train ---
+        eligible_currencies = (
+            train_df[train_df["currency"] != "EMPTY"]
+            .groupby("currency")
+            .size()
+            .pipe(lambda s: s[s >= _MIN_CURRENCY_N])
             .index.tolist()
         )
-        # Always include USD even if not in top-N
-        if "USD" not in top_currencies:
-            top_currencies.append("USD")
-        currency_fallbacks = self._compute_currency_fallbacks(train_df, top_currencies)
+        # Always include USD even if below threshold
+        if "USD" not in eligible_currencies:
+            eligible_currencies.append("USD")
+        currency_fallbacks = self._compute_currency_fallbacks(train_df, eligible_currencies)
 
         # --- Per-facility stats (base loop is tz_map, not train_df.groupby) ---
         # This ensures ALL 1876 facilities have an entry even with no train history.
@@ -148,6 +150,7 @@ class FacilityStatsBuilder:
             "train_rows": int(len(train_df)),
             "n_facilities": int(len(facilities)),
             "min_n_threshold": int(self.MIN_N),
+            "min_currency_n_threshold": int(_MIN_CURRENCY_N),
             "global_fallback": global_fallback,
             "currency_fallbacks": currency_fallbacks,
             "facilities": facilities,
