@@ -31,12 +31,12 @@ El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 
   3. `capture_delay_seconds` está excluido del feature set operativo y el bug de `is pd.NaT` está corregido.
   4. La moneda `"EMPTY"` se sanea a `"USD"` con flag en la extracción; el reporte de calidad de datos informa el conteo de registros afectados.
   5. Existe un documento de baseline congelado (métricas actuales con scorer bugfix, set dorado de ≥500 pagos, lista cerrada `FS-frame-operational-v1`, gate: top-5% monto <4×, off-hours local ~4–5%) y el AUC contra `pure_fraud` está marcado formalmente como "diagnóstico circular, no criterio".
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 00-01: Corregir bugs de `getattr` en `scoring/features.py` y añadir test de paridad batch↔real-time
-- [ ] 00-02: Recalibrar umbrales en val set y sanear moneda `"EMPTY"` en extracción
-- [ ] 00-03: Congelar baseline documentado: métricas actuales, set dorado, lista FS, gate formal
+- [ ] 00-01-PLAN.md — Fix getattr en `scoring/features.py` (acceso directo + lookup por tupla (role,currency)) + fix `pd.NaT` + test de paridad batch↔real-time [Wave 1]
+- [ ] 00-02-PLAN.md — Sanear moneda `"EMPTY"`→USD, materializar `FS-frame-operational-v1` (sin capture_delay), resolver threshold legacy (IF-40 usa val) [Wave 1]
+- [ ] 00-03-PLAN.md — Congelar baseline: set dorado ≥500 pagos, `baseline_v0.json` post-fix, gate de sesgo formal, AUC pure_fraud marcado circular [Wave 2]
 
 ### Fase 1: Artefacto de Stats y Feature Calculator
 **Goal**: Existe un artefacto versionado `facility_stats_v1.json` con mediana/IQR/zona-IANA/currency_group/fallback_level por facility, computado sobre el universo exacto del scorer; y un `FrameV1FeatureCalculator` que produce features de marco idénticas en batch y en real-time para el mismo pago.
@@ -123,7 +123,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Baseline Freeze y Bug Triage | 0/TBD | Not started | - |
+| 0. Baseline Freeze y Bug Triage | 0/3 | Planned | - |
 | 1. Artefacto de Stats y Feature Calculator | 0/TBD | Not started | - |
 | 2. Calibración Segmentada y Contrato API | 0/TBD | Not started | - |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
