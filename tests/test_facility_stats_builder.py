@@ -5,6 +5,7 @@ Covers:
 - FacilityStatsBuilder: fallback chain, IQR guard, tz-only facilities
 - validate_universe_filter: schema, row count tolerance, facility coverage
 - Integration test against the materialized artifact (skipped if files absent)
+- _MIN_CURRENCY_N threshold criterion (02-01)
 """
 from __future__ import annotations
 
@@ -204,6 +205,65 @@ def test_currency_fallbacks_usd_present(built_stats):
     for field in ("median", "iqr", "iqr_guarded", "mean", "n", "fallback_level"):
         assert field in usd, f"currency_fallback USD missing field '{field}'"
     assert usd["fallback_level"] == "currency"
+
+
+def test_currency_fallback_threshold():
+    """Only currencies with n >= _MIN_CURRENCY_N appear in currency_fallbacks (plus USD always).
+
+    Constructs a synthetic train_df with:
+      - EUR: 1500 rows -> above threshold -> must appear
+      - GBP:  500 rows -> below threshold -> must NOT appear (unless it is USD)
+      - USD:   10 rows -> below threshold, but USD is always included
+    """
+    from fraud_detector.stats.builder import FacilityStatsBuilder, _MIN_CURRENCY_N
+
+    rng = np.random.default_rng(99)
+    rows = []
+    # EUR: 1500 rows, well above _MIN_CURRENCY_N
+    for _ in range(1500):
+        rows.append({"facility_id": 2001, "amount": float(rng.normal(100, 20)), "currency": "EUR"})
+    # GBP: 500 rows, below _MIN_CURRENCY_N
+    for _ in range(500):
+        rows.append({"facility_id": 2002, "amount": float(rng.normal(80, 10)), "currency": "GBP"})
+    # USD: 10 rows, below _MIN_CURRENCY_N but always included
+    for _ in range(10):
+        rows.append({"facility_id": 2003, "amount": float(rng.normal(50, 5)), "currency": "USD"})
+
+    df = pd.DataFrame(rows)
+    tz_map = {
+        2001: "Eastern Time (US & Canada)",
+        2002: "Pacific Time (US & Canada)",
+        2003: "UTC",
+    }
+    fid_currency = {2001: "EUR", 2002: "GBP", 2003: "USD"}
+
+    stats = FacilityStatsBuilder().build(df, tz_map, fid_currency)
+    cf = set(stats["currency_fallbacks"].keys())
+
+    assert 1500 >= _MIN_CURRENCY_N, "Test assumption: EUR (1500) is >= threshold"
+    assert 500 < _MIN_CURRENCY_N, "Test assumption: GBP (500) is < threshold"
+
+    assert "EUR" in cf, f"EUR (n=1500 >= {_MIN_CURRENCY_N}) must be in currency_fallbacks"
+    assert "GBP" not in cf, f"GBP (n=500 < {_MIN_CURRENCY_N}) must NOT be in currency_fallbacks"
+    assert "USD" in cf, "USD must always be in currency_fallbacks regardless of row count"
+
+
+@pytest.mark.skipif(
+    not Path("output/models/facility_stats_v1.json").exists(),
+    reason="artefacto no materializado",
+)
+def test_materialized_artifact_has_mandated_currencies():
+    """Materialized artifact must contain the 9 newly mandated currency fallbacks.
+
+    AUD, ILS, GTQ, PKR, HKD, AED, BWP, SGD, COP were added in plan 02-01
+    by switching from top-5 to _MIN_CURRENCY_N=1000 threshold criterion.
+    """
+    with open("output/models/facility_stats_v1.json") as f:
+        stats = json.load(f)
+    cf = set(stats["currency_fallbacks"])
+    mandated = {"AUD", "ILS", "GTQ", "PKR", "HKD", "AED", "BWP", "SGD", "COP"}
+    missing = mandated - cf
+    assert not missing, f"currency_fallbacks missing mandated currencies: {missing}"
 
 
 # ---------------------------------------------------------------------------
