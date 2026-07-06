@@ -91,7 +91,9 @@ def assert_write_target_is_safe(
             "ALLOW_NONLOCAL_ANOMALY_SCORE_WRITES=true."
         )
 
-# Column order must match anomaly_scores DDL
+
+# Column order must match anomaly_scores DDL (including 02_anomaly_scores_frame_v1 migration).
+# 23 original columns + 3 frame-v1 columns = 26 total.
 _INSERT_COLUMNS = [
     "payment_id",
     "facility_id",
@@ -116,6 +118,11 @@ _INSERT_COLUMNS = [
     "payment_method",
     "currency",
     "source_enum",
+    # Frame-v1 columns added by migration 02_anomaly_scores_frame_v1.sql.
+    # IF-40 rows pass '' (empty string = DEFAULT '').
+    "calibration_segment",
+    "fallback_level",
+    "frame_flags",
 ]
 
 # Fetch query — payments in a closed window [cursor_start, cursor_end].
@@ -167,12 +174,30 @@ class BatchScorer:
     ``read_ch_client`` (production read-only). The anomaly_scores INSERT uses
     ``write_ch_client`` (local), guarded by ``assert_write_target_is_safe``.
 
+    **Shadow dual-run mode (SHAD-01):**
+    When ``scorer_shadow`` is provided the scorer operates in *dual* mode:
+    every scorable payment produces two rows in ``anomaly_scores`` — one for
+    the champion (``scoring_mode='shadow_old'``) and one for the challenger
+    (``scoring_mode='shadow_new'``).  The BatchContextProvider is called
+    **once** per batch; the resulting ``ctx_map`` is shared between both
+    models to avoid duplicating the 6 bulk queries.  Each INSERT uses a
+    distinct dedup token prefixed with ``shadow-old-`` / ``shadow-new-`` so
+    ClickHouse never deduplicates the second INSERT of the same payment.
+    Partial failure is isolated: a failure in one model's INSERT does not
+    prevent the other model's row from being written.
+
+    When ``scorer_shadow=None`` (default) the scorer operates in the existing
+    *active* mode — single scorer, 26-column rows with ``''`` for the three
+    frame-v1 columns.
+
     Args:
         scorer: Loaded SingleTransactionScorer instance (model + scaler + classifier).
         read_ch_client: clickhouse-connect client for READ (prod read-only).
         write_ch_client: clickhouse-connect client for WRITE (local). Defaults to
             ``read_ch_client`` only as a convenience; the guardrail then aborts
             unless fingerprints differ and the host is local.
+        scorer_shadow: Optional challenger ``SingleTransactionScorer`` (frame-v1).
+            When set, activates dual-run mode.
         anomaly_scores_table: Fully-qualified destination table for the INSERT.
         read_fingerprint: Connection fingerprint of the READ client (for guardrail).
         write_fingerprint: Connection fingerprint of the WRITE client (for guardrail).
@@ -188,6 +213,7 @@ class BatchScorer:
         read_ch_client,
         write_ch_client=None,
         *,
+        scorer_shadow: Optional[SingleTransactionScorer] = None,
         anomaly_scores_table: str = DEFAULT_ANOMALY_SCORES_TABLE,
         read_fingerprint: Optional[CHFingerprint] = None,
         write_fingerprint: Optional[CHFingerprint] = None,
@@ -197,6 +223,7 @@ class BatchScorer:
         insert_chunk_size: int = 10_000,
     ):
         self._scorer = scorer
+        self._scorer_shadow = scorer_shadow  # None → active mode; set → dual-run mode
         self._read_ch = read_ch_client
         self._write_ch = write_ch_client if write_ch_client is not None else read_ch_client
         self._anomaly_scores_table = anomaly_scores_table
@@ -267,11 +294,21 @@ class BatchScorer:
 
         # Step 3: Score each payment
         model_version = getattr(self._scorer, "_model_version", "IF-31-v1")
-        scored_rows, critical_alerts = self._score_all(payments, ctx_map, model_version)
 
-        # Step 4: INSERT in 10K chunks with dedup tokens
-        total_scored = len(scored_rows)
-        self._insert_chunks(scored_rows, cursor, cursor_end, model_version)
+        if self._scorer_shadow is not None:
+            # Dual-run mode: produce 2 rows per payment (shadow_old + shadow_new).
+            rows_old, rows_new, critical_alerts = self._score_all_dual(
+                payments, ctx_map
+            )
+            total_scored = len(rows_old) + len(rows_new)
+
+            # Step 4: INSERT both sets with distinct dedup tokens; isolate failures.
+            self._insert_chunks_dual(rows_old, rows_new, cursor, cursor_end)
+        else:
+            # Active mode: single scorer, 26-column rows.
+            scored_rows, critical_alerts = self._score_all(payments, ctx_map, model_version)
+            total_scored = len(scored_rows)
+            self._insert_chunks(scored_rows, cursor, cursor_end, model_version)
 
         elapsed = time.monotonic() - t_start
         rate = total_scored / elapsed if elapsed > 0 else 0
@@ -399,7 +436,9 @@ class BatchScorer:
                 payment.get("currency"),
             )
 
-            # Build row in _INSERT_COLUMNS order
+            # Build row in _INSERT_COLUMNS order (26 columns).
+            # The 3 trailing frame-v1 columns are empty strings for IF-40 rows
+            # (they match the DEFAULT '' in the DDL migration).
             row = [
                 int(payment["payment_id"]),  # payment_id UInt64
                 fid,  # facility_id UInt32
@@ -424,6 +463,10 @@ class BatchScorer:
                 str(payment.get("payment_method") or ""),  # payment_method
                 str(payment.get("currency") or ""),  # currency
                 str(payment.get("source_enum") or ""),  # source_enum (channel)
+                # Frame-v1 columns — '' for IF-40 (matches DEFAULT '').
+                "",  # calibration_segment
+                "",  # fallback_level
+                "",  # frame_flags
             ]
             scored_rows.append(row)
 
@@ -503,3 +546,199 @@ class BatchScorer:
                 f"({len(chunk)} rows, token={token!r}) "
                 f"in {time.monotonic() - t_ins:.3f}s"
             )
+
+    # ------------------------------------------------------------------
+    # Dual-run helpers (SHAD-01) — active only when scorer_shadow is set
+    # ------------------------------------------------------------------
+
+    def _score_all_dual(
+        self,
+        payments: List[dict],
+        ctx_map: Dict,
+    ):
+        """Score each payment with both champion and challenger.
+
+        The ``ctx_map`` produced by ``BatchContextProvider`` is factual
+        (rolling aggregates) and model-independent.  It is passed to both
+        scorers unchanged — no duplicate queries.  The IF-40 scorer may
+        internally enrich the context per-payment (``len(feature_names)==40``
+        path in ``SingleTransactionScorer``), but that enrichment happens
+        inside ``scorer.score()``; it does not affect the shared ctx_map.
+
+        Returns:
+            ``(rows_old, rows_new, critical_alerts)`` — two parallel lists of
+            26-value rows (one entry per payment, per model) and the union of
+            critical alerts from both models.
+        """
+        from scorer.shadow.dual_runner import ShadowDualRunner
+
+        runner = ShadowDualRunner(self._scorer, self._scorer_shadow)
+
+        rows_old: List[list] = []
+        rows_new: List[list] = []
+        critical_alerts: List[dict] = []
+
+        t_score = time.monotonic()
+        for payment in tqdm(payments, desc="Scoring (dual)", unit="txn", leave=False):
+            uid = int(payment["user_id"])
+            fid = int(payment["facility_id"])
+            # The context is built once and shared between both models.
+            context = ctx_map.get((uid, fid), UserContext())
+
+            row_started = time.monotonic()
+            r_old, r_new = runner.score_pair(payment, context, context)
+            latency_ms = (time.monotonic() - row_started) * 1000.0
+
+            amount_usd = normalize_amount_value(
+                payment.get("reservation_paid_out"),
+                payment.get("currency"),
+            )
+            scored_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+            def _build_row(result, scoring_mode_label: str) -> list:
+                """Build a 26-value row for _INSERT_COLUMNS from a ScoringResult."""
+                # features_json: stored as empty dict for dual-run rows.
+                # Feature vectors are internal to each scorer; they are not
+                # re-extracted here to avoid duplicating calculator logic.
+                feats_dict = {}
+                return [
+                    int(payment["payment_id"]),
+                    fid,
+                    str(payment.get("facility_name") or ""),
+                    uid,
+                    scored_at,
+                    payment["created_at"],
+                    amount_usd,
+                    result.score,
+                    float(result.percentile),
+                    result.risk_level,
+                    int(result.is_anomaly),
+                    result.model_version,
+                    json.dumps(result.factors),
+                    json.dumps(feats_dict),
+                    scoring_mode_label,
+                    result.feature_version,
+                    result.threshold_version,
+                    float(latency_ms),
+                    "",  # error — ShadowDualRunner never raises; failures become error results
+                    str(payment.get("gateway") or ""),
+                    str(payment.get("payment_method") or ""),
+                    str(payment.get("currency") or ""),
+                    str(payment.get("source_enum") or ""),
+                    # Frame-v1 columns
+                    str(result.calibration_segment or ""),
+                    str(result.fallback_level or ""),
+                    json.dumps(result.frame_flags) if result.frame_flags else "",
+                ]
+
+            rows_old.append(_build_row(r_old, "shadow_old"))
+            rows_new.append(_build_row(r_new, "shadow_new"))
+
+            for result, label in ((r_old, "shadow_old"), (r_new, "shadow_new")):
+                if result.risk_level == "critical":
+                    critical_alerts.append(
+                        {
+                            "payment_id": int(payment["payment_id"]),
+                            "user_id": uid,
+                            "facility_id": fid,
+                            "raw_score": result.score,
+                            "risk_level": result.risk_level,
+                            "amount_usd": amount_usd,
+                            "model_version": result.model_version,
+                            "feature_version": result.feature_version,
+                            "threshold_version": result.threshold_version,
+                            "scoring_mode": label,
+                        }
+                    )
+
+        scoring_elapsed = time.monotonic() - t_score
+        logger.info(
+            f"BatchScorer (dual): scored {len(rows_old)} pairs in {scoring_elapsed:.2f}s"
+        )
+        return rows_old, rows_new, critical_alerts
+
+    def _insert_chunks_dual(
+        self,
+        rows_old: List[list],
+        rows_new: List[list],
+        cursor: datetime,
+        cursor_end: datetime,
+    ) -> None:
+        """INSERT champion and challenger rows with distinct dedup token prefixes.
+
+        The guardrail ``assert_write_target_is_safe`` is the FIRST call — same
+        contract as ``_insert_chunks``.  Each model's chunks use a prefix of
+        ``shadow-old-`` or ``shadow-new-`` to ensure ClickHouse does not
+        deduplicate the second INSERT of the same payment window
+        (pitfall #3 from 04-RESEARCH.md).
+
+        Partial failure is isolated: if the old-chunk INSERT fails the new-chunk
+        INSERT still proceeds (and vice versa).
+        """
+        # Hard safety gate — must be first, same as _insert_chunks.
+        assert_write_target_is_safe(
+            read_fingerprint=self._read_fingerprint,
+            write_fingerprint=self._write_fingerprint,
+            write_host=self._write_host,
+            allow_nonlocal_write=self._allow_nonlocal_write,
+        )
+
+        chunk_size = self._insert_chunk_size
+        total = len(rows_old)
+        num_chunks = (total + chunk_size - 1) // chunk_size
+
+        logger.info(
+            f"BatchScorer (dual): inserting {total}×2 rows into "
+            f"{self._anomaly_scores_table} in {num_chunks} chunks"
+        )
+
+        for chunk_index, chunk_start in enumerate(range(0, total, chunk_size)):
+            chunk_old = rows_old[chunk_start : chunk_start + chunk_size]
+            chunk_new = rows_new[chunk_start : chunk_start + chunk_size]
+
+            token_old = (
+                f"shadow-old-{cursor.isoformat()}-{cursor_end.isoformat()}"
+                f"-IF40v1-chunk-{chunk_index}"
+            )
+            token_new = (
+                f"shadow-new-{cursor.isoformat()}-{cursor_end.isoformat()}"
+                f"-framev1-chunk-{chunk_index}"
+            )
+
+            # Champion INSERT — isolated from challenger failure.
+            try:
+                t_ins = time.monotonic()
+                self._write_ch.insert(
+                    self._anomaly_scores_table,
+                    chunk_old,
+                    column_names=_INSERT_COLUMNS,
+                    settings={"insert_deduplication_token": token_old},
+                )
+                logger.debug(
+                    f"BatchScorer (dual): inserted shadow_old chunk {chunk_index}/{num_chunks - 1} "
+                    f"({len(chunk_old)} rows, token={token_old!r}) "
+                    f"in {time.monotonic() - t_ins:.3f}s"
+                )
+            except Exception as exc:
+                logger.error(
+                    f"BatchScorer (dual): shadow_old INSERT failed chunk {chunk_index}: {exc}"
+                )
+
+            # Challenger INSERT — isolated from champion failure.
+            try:
+                t_ins = time.monotonic()
+                self._write_ch.insert(
+                    self._anomaly_scores_table,
+                    chunk_new,
+                    column_names=_INSERT_COLUMNS,
+                    settings={"insert_deduplication_token": token_new},
+                )
+                logger.debug(
+                    f"BatchScorer (dual): inserted shadow_new chunk {chunk_index}/{num_chunks - 1} "
+                    f"({len(chunk_new)} rows, token={token_new!r}) "
+                    f"in {time.monotonic() - t_ins:.3f}s"
+                )
+            except Exception as exc:
+                logger.error(
+                    f"BatchScorer (dual): shadow_new INSERT failed chunk {chunk_index}: {exc}"
+                )
