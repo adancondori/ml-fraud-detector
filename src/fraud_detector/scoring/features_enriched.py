@@ -107,9 +107,12 @@ class EnrichedFeatureCalculator:
         if not captured_at or not created_at:
             return 0.0
 
-        captured = pd.Timestamp(captured_at)
-        created = pd.Timestamp(created_at)
-        if captured is pd.NaT or created is pd.NaT:
+        try:
+            captured = pd.Timestamp(captured_at)
+            created = pd.Timestamp(created_at)
+        except (ValueError, TypeError):
+            return 0.0
+        if pd.isnull(captured) or pd.isnull(created):
             return 0.0
 
         delay = (captured.to_pydatetime() - created.to_pydatetime()).total_seconds()
