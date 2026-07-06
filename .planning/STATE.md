@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 
 ## Current Position
 
-Phase: 1 of 6 (Artefacto de Stats y Feature Calculator) — En progreso
-Plan: 2 of 3 en Fase 1 (01-01 completo; 01-02 completo; 01-03 pendiente)
-Status: En progreso — 01-02 completo, iniciando 01-03
-Last activity: 2026-07-06 — Completado 01-02-PLAN.md: FrameV1FeatureCalculator con 30 features, paridad max diff=1.44e-12, DST verificado NY+BsAs+LaPaz
+Phase: 1 of 6 (Artefacto de Stats y Feature Calculator) — COMPLETO
+Plan: 3 of 3 en Fase 1 (01-01 completo; 01-02 completo; 01-03 completo)
+Status: Fase 1 completa — Iniciando Fase 2 (Calibracion Segmentada)
+Last activity: 2026-07-06 — Completado 01-03-PLAN.md: IF frame-v1 reentrenado (train saneado), Gate 1 winsorizado 1.49x PASS, Gate 2 off-hours local 6.46% PASS, paridad 0.0
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -59,6 +59,10 @@ Recent decisions affecting current work:
 - [01-02]: currency_original separado de currency en FrameV1FeatureCalculator: staff stats aprendidos con moneda original como key (no USD) — lookup usa (role, currency_original).
 - [01-02]: Sentinel -1.0 en UserContext para time_since_last_txn/credit_flow_ratio/category_entropy_30d: -1.0 = derivar de otros campos; >=0 = usar directamente.
 - [01-02]: FRAME_V1_FEATURE_NAMES = frame_version(DISJOINT30) = 30 features; assert len==30 a nivel de módulo; max diff paridad = 1.44e-12 sobre 3213 pagos, 680 facilities.
+- [01-03]: Gate 1 metrica robusta: top5_amount_ratio_winsorized_p999 (not raw mean) — cola pesada invalida ratio de medias; gate1_pass = winsorized < 4.0 (1.49x PASS).
+- [01-03]: Saneo upstream en loader.py (no en features): DataManager.compute_amount_sanity_thresholds + sanitize_amount_df; per-currency p99.99; preserva train/serve parity 0.0.
+- [01-03]: Train drop 209 filas (0.0067%, amount > p99.99 per-currency). Causa raiz: 2 filas val (USD 100M/10M, facility 1422) = 88.4% del monto top-5%. Scorer en vivo intacto.
+- [01-03]: Gate 2 off-hours local: 6.46% (banda 3-7% PASS); ratio reduccion vs UTC baseline 29.78% = 78%.
 
 ### Pending Todos
 
@@ -73,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T06:19:20Z
-Stopped at: Completado 01-02-PLAN.md (FrameV1FeatureCalculator, 17 tests verdes, paridad max diff=1.44e-12). Iniciando 01-03.
+Last session: 2026-07-06T13:10:00Z
+Stopped at: Completado 01-03-PLAN.md (retrain frame-v1 saneado, Gate 1 1.49x PASS, Gate 2 6.46% PASS, parity 0.0). Fase 1 cerrada.
 Resume file: None
