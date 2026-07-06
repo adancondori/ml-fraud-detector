@@ -109,11 +109,12 @@ Plans:
   2. Un revisor puede registrar una etiqueta con todos los campos de procedencia requeridos: `reviewer_label`, `reviewed_at`, `reviewer_id`, `score_at_label_time`, `model_version`, `reviewer_saw_factors`.
   3. El muestreo HITL incluye ≥20% de transacciones por debajo del p50 de score (no alertadas), documentando la estrategia para estimación de falsos negativos.
   4. La distribución de etiquetas capturadas en la primera semana de operación puede consultarse sin ambigüedad sobre qué modelo versión generó el score al momento de revisión.
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: Cola de revisión top-k con `top_factors` y schema de etiquetas con procedencia
-- [ ] 05-02: Muestreo HITL defensivo (80% alertados + ≥20% no alertados) y documentación de metodología
+- [ ] 05-01-PLAN.md — `HitlQueueQuery`: cola ClickHouse top-k `shadow_new` (percentile DESC) + muestra below-p50, con `top_factors`, READ-only (TDD) [Wave 1]
+- [ ] 05-02-PLAN.md — Migración `TriageAction` (6 campos procedencia) + `HitlLabelForm` (vocabulario 4 categorías) + `HitlLabelService` (captura HITL-02, MySQL WRITE) [Wave 1]
+- [ ] 05-03-PLAN.md — `hitl_queue_builder.py` (export parametrizado --top-k/--below-p50-pct/--capacity) + metodología de estimación de falsos negativos (HITL-03) [Wave 1]
 
 ## Progress
 
@@ -127,4 +128,4 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | 2. Calibración Segmentada y Contrato API | 3/3 | ✓ Complete | 2026-07-06 |
 | 3. Wiring del Scorer e Integración Platform | 2/2 | ✓ Complete | 2026-07-06 |
 | 4. Shadow Dual-Run y Validación de Sesgo | 2/2 | ✓ Complete (gate go/no-go diferido) | 2026-07-06 |
-| 5. Cola HITL y Captura de Etiquetas | 0/TBD | Not started | - |
+| 5. Cola HITL y Captura de Etiquetas | 0/3 | Planned | - |
