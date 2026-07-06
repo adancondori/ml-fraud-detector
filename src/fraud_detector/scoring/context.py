@@ -53,6 +53,13 @@ class UserContext:
     is_first_gateway_for_user: float = 0.0
     source_change_recent: float = 0.0
 
+    # Frame-v1 pre-computed aggregates (sentinel -1.0 = derive from other fields)
+    # time_since_last_txn: if >= 0.0, used directly; else derived from last_txn_at
+    # credit_flow_ratio: if >= 0.0, used directly; else derived from debit/prepaid
+    time_since_last_txn: float = -1.0
+    credit_flow_ratio: float = -1.0
+    category_entropy_30d: float = -1.0
+
 
 class UserContextProvider:
     """Fetches user context from ClickHouse for single-transaction scoring.
