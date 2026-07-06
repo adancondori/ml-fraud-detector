@@ -48,12 +48,12 @@ Plans:
   3. Las features de magnitud (`amount_facility_ratio`, z-score robusto) y de hora local (IANA con DST) se calculan sin usar USD absoluto ni UTC respectivamente; un test unitario verifica DST correctamente para al menos dos zonas latinoamericanas.
   4. Un model global reentrenado sobre `FS-frame-operational-v1` en validación produce: sesgo de monto top-5% <4× (vs ~15,7× actual) y off-hours local ~4–5% (vs ~30% UTC actual).
   5. Un test de paridad sobre ≥100 pagos del val set afirma que `FrameV1FeatureCalculator.calculate(payment, context)` y `calculate_from_row(row, facility_stats)` producen vectores de features idénticos (diferencia máxima <1e-8).
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: `FacilityStatsBuilder` — cómputo del artefacto con fallback y validación de universo
-- [ ] 01-02: `FrameV1FeatureCalculator` — features de magnitud relativa y hora local IANA
-- [ ] 01-03: Reentrenamiento del modelo global sobre `FS-frame-operational-v1` y validación de gates de sesgo
+- [ ] 01-01-PLAN.md — `FacilityStatsBuilder`: artefacto `facility_stats_v1.json` con fallback chain, IQR guarded y mapa Rails→IANA (64 zonas) [Wave 1]
+- [ ] 01-02-PLAN.md — `FrameV1FeatureCalculator` (TDD): 30 features de marco, superficie dual con paridad <1e-8 y hora local IANA con DST [Wave 2]
+- [ ] 01-03-PLAN.md — Reentrenamiento global sobre `FS-frame-v1` y gate de sesgo en val (top-5% <4×, off-hours local ~4-5%) [Wave 3]
 
 ### Fase 2: Calibración Segmentada y Contrato API
 **Goal**: Los umbrales se calibran por segmento (facility → currency_group → global) sobre el val set con guardia de n mínimo; el `artifact_loader` carga el nuevo artefacto de stats y los thresholds segmentados de forma retrocompatible; el contrato `frame-v1` falla de forma observable ante campos ausentes.
@@ -124,7 +124,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
-| 1. Artefacto de Stats y Feature Calculator | 0/TBD | Not started | - |
+| 1. Artefacto de Stats y Feature Calculator | 0/3 | Not started | - |
 | 2. Calibración Segmentada y Contrato API | 0/TBD | Not started | - |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
 | 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
