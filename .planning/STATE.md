@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 
 ## Current Position
 
-Phase: 3 of 6 (Wiring del Scorer e Integración Platform) — Fase completa
-Plan: 2 of 2 en Fase 3 (03-02 completo)
-Status: Phase complete — listo para iniciar Fase 4
-Last activity: 2026-07-06 — Completado 03-02-PLAN.md: AlertManager persiste metadata frame-v1 en JSON (PLAT-02); scorable? excluye 'free' (PLAT-03); PLAT-01 reconciliado (scorer autónomo); E2E aprobado por humano
+Phase: 4 of 6 (Shadow/Dual-Run y Validación de Sesgo)
+Plan: 1 of 2 en Fase 4 (04-01 completo)
+Status: In progress — 04-01 completo; siguiente 04-02 (shadow monitoring + gate SHAD-02/SHAD-03)
+Last activity: 2026-07-06 — Completado 04-01-PLAN.md: DDL migration 3 cols frame-v1; ShadowDualRunner (contexto compartido, fallo parcial aislado); BatchScorer dual (2 filas/pago, 26 cols, tokens shadow-old-/shadow-new-); 57 tests verdes
 
-Progress: [█████████░] 88% de Fases 0–3 (11/11 planes completados)
+Progress: [█████████░] ~92% de Fases 0–4 (12/13 planes completados)
 
 ## Performance Metrics
 
@@ -102,8 +102,16 @@ None yet.
 - [03-02]: .compact en build_metadata: nil-safety garantiza retrocompat IF-40 sin condicional explícito.
 - [03-02]: PLAT-01 reconciliado — build_payload intocado; Rails no depende de facility_time_zone_iana; scorer resuelve IANA autónomamente.
 
+### New Decisions (04-01)
+
+- [04-01]: metadata_filename legacy guard: fallbacks IF-40/IF-31 solo cuando filename=='model_metadata.json'; override explícito falla con FileNotFoundError si ausente (no silencia error).
+- [04-01]: _score_all_dual almacena features_json={} vacío para filas shadow — vectores son internos al scorer; re-extraerlos duplicaría lógica del feature calculator; queries SHAD-02 no necesitan vectores raw.
+- [04-01]: scorer activo en _state es independiente del dual: los tres scorers (scorer, scorer_champion, scorer_new) coexisten; scorer activo responde rutas RT; dual-runner es exclusivo del path batch.
+- [04-01]: _INSERT_COLUMNS 23→26; active mode pasa '' para las 3 cols frame-v1 (compatible con DEFAULT '' del DDL 02_anomaly_scores_frame_v1.sql).
+- [04-01]: assert_write_target_is_safe es primera llamada tanto en _insert_chunks (active) como en _insert_chunks_dual (shadow) — contrato del guardrail preservado.
+
 ## Session Continuity
 
-Last session: 2026-07-06T17:12:14Z
-Stopped at: Completado 03-02-PLAN.md (Fase 3 completa — AlertManager frame-v1; scorable? free; E2E aprobado). Siguiente: Fase 4 shadow/dual-run.
+Last session: 2026-07-06T18:16:50Z
+Stopped at: Completado 04-01-PLAN.md (Fase 4 Plan 1 completo — DDL migration, ShadowDualRunner, BatchScorer dual mode, 57 tests verdes). Siguiente: Fase 4 Plan 2 (04-02 shadow monitoring + gate SHAD-02/SHAD-03).
 Resume file: None
