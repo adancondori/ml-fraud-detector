@@ -17,7 +17,7 @@ El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 
 - [x] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
 - [x] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
 - [x] **Fase 4: Shadow Dual-Run y Validación de Sesgo** — Activar puntuación dual (champion vs frame-v1), monitoreo shadow y gate go/no-go cuantitativo sobre datos reales.
-- [ ] **Fase 5: Cola HITL y Captura de Etiquetas** — Abrir cola de revisión humana top-k, capturar etiquetas con procedencia completa, incluir muestreo defensivo de falsos negativos.
+- [x] **Fase 5: Cola HITL y Captura de Etiquetas** — Abrir cola de revisión humana top-k, capturar etiquetas con procedencia completa, incluir muestreo defensivo de falsos negativos.
 
 ## Phase Details
 
@@ -112,9 +112,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — `HitlQueueQuery`: cola ClickHouse top-k `shadow_new` (percentile DESC) + muestra below-p50, con `top_factors`, READ-only (TDD) [Wave 1]
-- [ ] 05-02-PLAN.md — Migración `TriageAction` (6 campos procedencia) + `HitlLabelForm` (vocabulario 4 categorías) + `HitlLabelService` (captura HITL-02, MySQL WRITE) [Wave 1]
-- [ ] 05-03-PLAN.md — `hitl_queue_builder.py` (export parametrizado --top-k/--below-p50-pct/--capacity) + metodología de estimación de falsos negativos (HITL-03) [Wave 1]
+- [x] 05-01-PLAN.md — `HitlQueueQuery`: cola ClickHouse top-k `shadow_new` (percentile DESC) + muestra below-p50, con `top_factors`, READ-only (TDD) [Wave 1]
+- [x] 05-02-PLAN.md — Migración `TriageAction` (6 campos procedencia) + `HitlLabelForm` (vocabulario 4 categorías) + `HitlLabelService` (captura HITL-02, MySQL WRITE) [Wave 1]
+- [x] 05-03-PLAN.md — `hitl_queue_builder.py` (export parametrizado --top-k/--below-p50-pct/--capacity) + metodología de estimación de falsos negativos (HITL-03) [Wave 1]
 
 ## Progress
 
@@ -128,4 +128,4 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | 2. Calibración Segmentada y Contrato API | 3/3 | ✓ Complete | 2026-07-06 |
 | 3. Wiring del Scorer e Integración Platform | 2/2 | ✓ Complete | 2026-07-06 |
 | 4. Shadow Dual-Run y Validación de Sesgo | 2/2 | ✓ Complete (gate go/no-go diferido) | 2026-07-06 |
-| 5. Cola HITL y Captura de Etiquetas | 0/3 | Planned | - |
+| 5. Cola HITL y Captura de Etiquetas | 3/3 | ✓ Complete (poblado HITL diferido) | 2026-07-06 |

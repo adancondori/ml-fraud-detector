@@ -46,9 +46,9 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Human-in-the-loop (Fase 5)
 
-- [ ] **HITL-01**: Existe una cola de revisión que exporta el top-k ordenado por risk_level/percentile del modelo frame-v1 con `top_factors`
-- [ ] **HITL-02**: Se capturan etiquetas de revisor con procedencia (`reviewer_label`, `reviewed_at`, `reviewer_id`, `score_at_label_time`, `model_version`, `reviewer_saw_factors`)
-- [ ] **HITL-03**: El muestreo HITL incluye ≥20% de transacciones no alertadas (bajo p50) para estimar falsos negativos
+- [x] **HITL-01**: Existe una cola de revisión que exporta el top-k ordenado por risk_level/percentile del modelo frame-v1 con `top_factors`
+- [x] **HITL-02**: Se capturan etiquetas de revisor con procedencia (`reviewer_label`, `reviewed_at`, `reviewer_id`, `score_at_label_time`, `model_version`, `reviewer_saw_factors`)
+- [x] **HITL-03**: El muestreo HITL incluye ≥20% de transacciones no alertadas (bajo p50) para estimar falsos negativos
 
 ## v2 Requirements
 
@@ -103,9 +103,9 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 | SHAD-01 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
 | SHAD-02 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
 | SHAD-03 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Complete |
-| HITL-01 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
-| HITL-02 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
-| HITL-03 | Fase 5 — Cola HITL y Captura de Etiquetas | Pending |
+| HITL-01 | Fase 5 — Cola HITL y Captura de Etiquetas | Complete |
+| HITL-02 | Fase 5 — Cola HITL y Captura de Etiquetas | Complete |
+| HITL-03 | Fase 5 — Cola HITL y Captura de Etiquetas | Complete |
 
 **Coverage:**
 - v1 requirements: 24 total

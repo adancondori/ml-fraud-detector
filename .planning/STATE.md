@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01, 05-02, 05-03 completos)
+**Current focus:** Milestone v1 completo — auditoría pendiente (/so:audit-milestone)
 
 ## Current Position
 
@@ -14,7 +14,7 @@ Plan: 05-01, 05-02 y 05-03 completos (3/3 planes Fase 5)
 Status: Fase 5 completa — 05-02 entregado (migración 20260706193114 6 columnas HITL, HitlLabelForm 4 cats, HitlLabelService enriquece TriageAction, 32 specs TDD verdes). Código Rails SIN commit (regla 7 — pendiente revisión usuario). Endpoint diferido POST-shadow.
 Last activity: 2026-07-06 — Completado 05-02-PLAN.md: migración nullable (reviewer_label, reviewed_at, score_at_label_time, model_version_at_label, reviewer_saw_factors, hitl_queue_source), HitlLabelForm VALID_REVIEWER_LABELS, HitlLabelService (transaction + rollback + Time.current), alias_attribute :reviewer_id, 32 specs TDD verdes. Sin commit Rails (regla 7).
 
-Progress: [██████████] Infraestructura scorer (Fases 0-4 completas); Fase 5 completa (3/3 planes); HITL infra+service lista; endpoint diferido POST-shadow
+Progress: [██████████] 100% — MILESTONE v1 COMPLETO (6/6 fases, 16/16 planes)
 
 ## Performance Metrics
 
