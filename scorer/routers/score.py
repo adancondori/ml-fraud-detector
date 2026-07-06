@@ -16,6 +16,7 @@ from scorer.schemas import (
     BatchScoreResponse,
     CriticalAlert,
     FactorItem,
+    FrameFlags,
     ScoreRequest,
     ScoreResponse,
 )
@@ -39,6 +40,10 @@ def score_single(
     payment = request.model_dump()
     result = scorer.score(payment)
 
+    frame_flags_obj = None
+    if result.frame_flags is not None:
+        frame_flags_obj = FrameFlags(**result.frame_flags)
+
     return ScoreResponse(
         raw_score=result.score,
         percentile=result.percentile,
@@ -48,6 +53,9 @@ def score_single(
         model_version=result.model_version,
         feature_version=result.feature_version,
         threshold_version=result.threshold_version,
+        calibration_segment=result.calibration_segment,
+        fallback_level=result.fallback_level,
+        frame_flags=frame_flags_obj,
     )
 
 
