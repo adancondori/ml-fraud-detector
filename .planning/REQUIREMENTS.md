@@ -18,12 +18,12 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Artefacto de stats y features de marco (Fase 1)
 
-- [ ] **STATS-01**: Existe un artefacto versionado `facility_stats_v1.json` con mediana/IQR/n, moneda primaria, currency_group y zona IANA por facility, computado sobre el universo exacto del scorer
-- [ ] **STATS-02**: El artefacto usa cadena de fallback (facility con n<30 → currency → global) y registra `fallback_level` por entrada
-- [ ] **FRAME-01**: Las features de magnitud se calculan relativas a la facility (`amount_facility_ratio`, z-score robusto contra mediana/IQR) sin USD absoluto
-- [ ] **FRAME-02**: Las features temporales se calculan en hora local de la facility vía zona IANA con DST (mapeo Rails→IANA), no en UTC
-- [ ] **FRAME-03**: El feature set cerrado `FS-frame-operational-v1` está definido, versionado y documentado (conserva las features de velocidad invariantes al marco)
-- [ ] **FRAME-04**: Un modelo global reentrenado sobre `FS-frame-operational-v1` pasa los gates de reducción de sesgo en validación
+- [x] **STATS-01**: Existe un artefacto versionado `facility_stats_v1.json` con mediana/IQR/n, moneda primaria, currency_group y zona IANA por facility, computado sobre el universo exacto del scorer
+- [x] **STATS-02**: El artefacto usa cadena de fallback (facility con n<30 → currency → global) y registra `fallback_level` por entrada
+- [x] **FRAME-01**: Las features de magnitud se calculan relativas a la facility (`amount_facility_ratio`, z-score robusto contra mediana/IQR) sin USD absoluto
+- [x] **FRAME-02**: Las features temporales se calculan en hora local de la facility vía zona IANA con DST (mapeo Rails→IANA), no en UTC
+- [x] **FRAME-03**: El feature set cerrado `FS-frame-operational-v1` está definido, versionado y documentado (conserva las features de velocidad invariantes al marco)
+- [x] **FRAME-04**: Un modelo global reentrenado sobre `FS-frame-operational-v1` pasa los gates de reducción de sesgo en validación
 
 ### Calibración segmentada y contrato API (Fase 2)
 
@@ -87,12 +87,12 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 | BASE-04 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
 | BASE-05 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
 | BASE-06 | Fase 0 — Baseline Freeze y Bug Triage | Complete |
-| STATS-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
-| STATS-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
-| FRAME-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
-| FRAME-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
-| FRAME-03 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
-| FRAME-04 | Fase 1 — Artefacto de Stats y Feature Calculator | Pending |
+| STATS-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
+| STATS-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
+| FRAME-01 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
+| FRAME-02 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
+| FRAME-03 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
+| FRAME-04 | Fase 1 — Artefacto de Stats y Feature Calculator | Complete |
 | CAL-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
 | CAL-02 | Fase 2 — Calibración Segmentada y Contrato API | Pending |
 | API-01 | Fase 2 — Calibración Segmentada y Contrato API | Pending |

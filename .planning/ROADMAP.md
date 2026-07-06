@@ -13,7 +13,7 @@ El scorer de anomalías de Playbypoint (Isolation Forest sobre transacciones) a�
 El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 es la raíz del grafo de dependencias; Fase 2 depende de Fase 1; Fase 3 depende de Fase 2; Fase 4 depende de Fase 3; Fase 5 depende de shadow activo (Fase 4).
 
 - [x] **Fase 0: Baseline Freeze y Bug Triage** — Corregir bugs activos en producción, fijar gate de sesgo, congelar baseline limpio antes de cualquier medición.
-- [ ] **Fase 1: Artefacto de Stats y Feature Calculator** — Construir la raíz de dependencias: `facility_stats_v1.json` y `FrameV1FeatureCalculator` con paridad batch↔real-time verificada.
+- [x] **Fase 1: Artefacto de Stats y Feature Calculator** — Construir la raíz de dependencias: `facility_stats_v1.json` y `FrameV1FeatureCalculator` con paridad batch↔real-time verificada.
 - [ ] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
 - [ ] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
 - [ ] **Fase 4: Shadow Dual-Run y Validación de Sesgo** — Activar puntuación dual (champion vs frame-v1), monitoreo shadow y gate go/no-go cuantitativo sobre datos reales.
@@ -51,9 +51,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — `FacilityStatsBuilder`: artefacto `facility_stats_v1.json` con fallback chain, IQR guarded y mapa Rails→IANA (64 zonas) [Wave 1]
-- [ ] 01-02-PLAN.md — `FrameV1FeatureCalculator` (TDD): 30 features de marco, superficie dual con paridad <1e-8 y hora local IANA con DST [Wave 2]
-- [ ] 01-03-PLAN.md — Reentrenamiento global sobre `FS-frame-v1` y gate de sesgo en val (top-5% <4×, off-hours local ~4-5%) [Wave 3]
+- [x] 01-01-PLAN.md — `FacilityStatsBuilder`: artefacto `facility_stats_v1.json` con fallback chain, IQR guarded y mapa Rails→IANA (64 zonas) [Wave 1]
+- [x] 01-02-PLAN.md — `FrameV1FeatureCalculator` (TDD): 30 features de marco, superficie dual con paridad <1e-8 y hora local IANA con DST [Wave 2]
+- [x] 01-03-PLAN.md — Reentrenamiento global sobre `FS-frame-v1` y gate de sesgo en val (top-5% <4×, off-hours local ~4-5%) [Wave 3]
 
 ### Fase 2: Calibración Segmentada y Contrato API
 **Goal**: Los umbrales se calibran por segmento (facility → currency_group → global) sobre el val set con guardia de n mínimo; el `artifact_loader` carga el nuevo artefacto de stats y los thresholds segmentados de forma retrocompatible; el contrato `frame-v1` falla de forma observable ante campos ausentes.
@@ -124,7 +124,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
-| 1. Artefacto de Stats y Feature Calculator | 0/3 | Not started | - |
+| 1. Artefacto de Stats y Feature Calculator | 3/3 | ✓ Complete | 2026-07-06 |
 | 2. Calibración Segmentada y Contrato API | 0/TBD | Not started | - |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
 | 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
