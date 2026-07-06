@@ -73,5 +73,15 @@
     "gate2_pass": true,
     "n_val_rows": 1130117,
     "all_gates_pass": true
-  }
+  },
+  "model_version": "frame-v1",
+  "score_function": "decision_function",
+  "threshold_version": "segmented-v1",
+  "artifact_files": {
+    "model": "isolation_forest_frame_v1.joblib",
+    "scaler": "scaler_frame_v1.joblib",
+    "feature_list": "feature_list_frame_v1.json",
+    "thresholds": "thresholds_segmented_v1.json"
+  },
+  "thresholds_segmented_artifact": "thresholds_segmented_v1.json"
 }
