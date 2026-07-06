@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 ## Current Position
 
 Phase: 1 of 6 (Artefacto de Stats y Feature Calculator) — En progreso
-Plan: 1 of 3 en Fase 1 (01-01 completo; 01-02, 01-03 pendientes)
-Status: En progreso — 01-01 completo, iniciando 01-02
-Last activity: 2026-07-06 — Completado 01-01-PLAN.md: facility_stats_v1.json materializado, 1876 facilities con iana_tz, fallback chain, IQR guard
+Plan: 2 of 3 en Fase 1 (01-01 completo; 01-02 completo; 01-03 pendiente)
+Status: En progreso — 01-02 completo, iniciando 01-03
+Last activity: 2026-07-06 — Completado 01-02-PLAN.md: FrameV1FeatureCalculator con 30 features, paridad max diff=1.44e-12, DST verificado NY+BsAs+LaPaz
 
-Progress: [████░░░░░░] 40%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -56,6 +56,9 @@ Recent decisions affecting current work:
 - [01-01]: facility_stats_v1.json itera tz_map (1876) no train_df.groupby (689) — garantiza iana_tz en todas las facilities para el path RT; 580 facility / 1289 currency / 7 global.
 - [01-01]: currency_fallbacks para USD, CAD, MYR, HNL, NIO (top-5 frecuencia en train); 7 facilities caen a global.
 - [01-01]: validate_universe_filter(stats, sample_df, tz_df) recibe tz_df como 3er arg para assert len(facilities)==tz_df.facility_id.nunique()==1876.
+- [01-02]: currency_original separado de currency en FrameV1FeatureCalculator: staff stats aprendidos con moneda original como key (no USD) — lookup usa (role, currency_original).
+- [01-02]: Sentinel -1.0 en UserContext para time_since_last_txn/credit_flow_ratio/category_entropy_30d: -1.0 = derivar de otros campos; >=0 = usar directamente.
+- [01-02]: FRAME_V1_FEATURE_NAMES = frame_version(DISJOINT30) = 30 features; assert len==30 a nivel de módulo; max diff paridad = 1.44e-12 sobre 3213 pagos, 680 facilities.
 
 ### Pending Todos
 
@@ -70,6 +73,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T06:01:46Z
-Stopped at: Completado 01-01-PLAN.md (facility_stats_v1.json materializado, 1876 facilities, 22 tests verdes). Iniciando 01-02.
+Last session: 2026-07-06T06:19:20Z
+Stopped at: Completado 01-02-PLAN.md (FrameV1FeatureCalculator, 17 tests verdes, paridad max diff=1.44e-12). Iniciando 01-03.
 Resume file: None
