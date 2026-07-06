@@ -34,9 +34,9 @@ Requisitos para el milestone operativo. Cada uno mapea a una fase del roadmap.
 
 ### Integración platform (Fase 3)
 
-- [ ] **PLAT-01**: El payload real-time de `RealTimeScoringService` envía `facility_time_zone_iana` (resuelto de forma segura contra zonas inválidas)
-- [ ] **PLAT-02**: `AlertManager` persiste `calibration_segment`, `fallback_level`, `frame_flags` y `feature_frame_version` en la metadata de alerta
-- [ ] **PLAT-03**: El universo `scorable?` está alineado entre batch y real-time (no puntuar `reversal`/`free`; reembolsados marcados post-hoc)
+- [x] **PLAT-01**: El payload real-time de `RealTimeScoringService` envía `facility_time_zone_iana` (resuelto de forma segura contra zonas inválidas)
+- [x] **PLAT-02**: `AlertManager` persiste `calibration_segment`, `fallback_level`, `frame_flags` y `feature_frame_version` en la metadata de alerta
+- [x] **PLAT-03**: El universo `scorable?` está alineado entre batch y real-time (no puntuar `reversal`/`free`; reembolsados marcados post-hoc)
 
 ### Shadow mode y validación (Fase 4)
 
@@ -97,9 +97,9 @@ Confirmado por el roadmapper — 24/24 requisitos v1 mapeados.
 | CAL-02 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
 | API-01 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
 | API-02 | Fase 2 — Calibración Segmentada y Contrato API | Complete |
-| PLAT-01 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
-| PLAT-02 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
-| PLAT-03 | Fase 3 — Wiring del Scorer e Integración Platform | Pending |
+| PLAT-01 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
+| PLAT-02 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
+| PLAT-03 | Fase 3 — Wiring del Scorer e Integración Platform | Complete |
 | SHAD-01 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
 | SHAD-02 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |
 | SHAD-03 | Fase 4 — Shadow Dual-Run y Validación de Sesgo | Pending |

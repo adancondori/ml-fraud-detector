@@ -15,7 +15,7 @@ El orden es no negociable: Fase 0 desbloquea todo como gate de baseline; Fase 1 
 - [x] **Fase 0: Baseline Freeze y Bug Triage** — Corregir bugs activos en producción, fijar gate de sesgo, congelar baseline limpio antes de cualquier medición.
 - [x] **Fase 1: Artefacto de Stats y Feature Calculator** — Construir la raíz de dependencias: `facility_stats_v1.json` y `FrameV1FeatureCalculator` con paridad batch↔real-time verificada.
 - [x] **Fase 2: Calibración Segmentada y Contrato API** — Calibrar umbrales por segmento sobre val set con cadena de fallback; extender `artifact_loader`; bloquear contrato `frame-v1`.
-- [ ] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
+- [x] **Fase 3: Wiring del Scorer e Integración Platform** — Conectar los componentes probados al scorer en vivo; hacer que Rails envíe `facility_time_zone_iana`; persistir metadata de alerta ampliada.
 - [ ] **Fase 4: Shadow Dual-Run y Validación de Sesgo** — Activar puntuación dual (champion vs frame-v1), monitoreo shadow y gate go/no-go cuantitativo sobre datos reales.
 - [ ] **Fase 5: Cola HITL y Captura de Etiquetas** — Abrir cola de revisión humana top-k, capturar etiquetas con procedencia completa, incluir muestreo defensivo de falsos negativos.
 
@@ -83,8 +83,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Wiring del scorer: `SingleTransactionScorer` despacha a `FrameV1FeatureCalculator` + `SegmentedThresholdClassifier` por presencia de artefactos; `ScoringResult` + router propagan `calibration_segment`/`fallback_level`/`frame_flags`; resolución IANA autónoma; retrocompat IF-40 [Wave 1]
-- [ ] 03-02-PLAN.md — Integración platform Rails: `AlertManager` persiste metadata frame-v1 (JSON, sin migración); `scorable?` excluye `free`; E2E de prueba Rails→scorer→alerta [Wave 2]
+- [x] 03-01-PLAN.md — Wiring del scorer: `SingleTransactionScorer` despacha a `FrameV1FeatureCalculator` + `SegmentedThresholdClassifier` por presencia de artefactos; `ScoringResult` + router propagan `calibration_segment`/`fallback_level`/`frame_flags`; resolución IANA autónoma; retrocompat IF-40 [Wave 1]
+- [x] 03-02-PLAN.md — Integración platform Rails: `AlertManager` persiste metadata frame-v1 (JSON, sin migración); `scorable?` excluye `free`; E2E de prueba Rails→scorer→alerta [Wave 2]
 ### Fase 4: Shadow Dual-Run y Validación de Sesgo
 **Goal**: Cada pago scorable recibe dos puntuaciones simultáneas (champion actual y frame-v1), ambas persistidas; las queries de monitoreo shadow reportan reducción de sesgo sobre datos reales; un gate go/no-go cuantitativo determina si frame-v1 puede promoverse.
 **Depends on**: Fase 3 (Rails enviando `facility_time_zone_iana`; scorer wired; metadata persistida).
@@ -125,6 +125,6 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 | 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
 | 1. Artefacto de Stats y Feature Calculator | 3/3 | ✓ Complete | 2026-07-06 |
 | 2. Calibración Segmentada y Contrato API | 3/3 | ✓ Complete | 2026-07-06 |
-| 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
+| 3. Wiring del Scorer e Integración Platform | 2/2 | ✓ Complete | 2026-07-06 |
 | 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
 | 5. Cola HITL y Captura de Etiquetas | 0/TBD | Not started | - |
