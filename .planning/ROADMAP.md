@@ -64,12 +64,12 @@ Plans:
   2. El `artifact_loader` carga `facility_stats_v1.json` + `thresholds_segmented_v1.json` en el dataclass `Artifacts` sin romper el scorer legacy (campo `None` → ruta legacy activa).
   3. Una request al scorer con `facility_time_zone_iana` ausente activa `frame_flags.timezone_missing=true` en la respuesta — nunca silencia el campo con un default UTC.
   4. La respuesta del scorer incluye `calibration_segment`, `fallback_level` y `frame_flags` como campos estructurados.
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: `SegmentedThresholdCalibrator` con fallback y guardia de n mínimo
-- [ ] 02-02: Extensión retrocompatible del `artifact_loader` para stats + thresholds segmentados
-- [ ] 02-03: Contrato API `frame-v1`: campos opcionales con falla observable, respuesta enriquecida
+- [ ] 02-01-PLAN.md — Extender currency_fallbacks (n>=1000, 14 monedas) + regenerar `facility_stats_v1.json` + re-correr paridad Fase 1 [Wave 1]
+- [ ] 02-02-PLAN.md — `SegmentedThresholdCalibrator` + `SegmentedThresholdClassifier` + `thresholds_segmented_v1.json` (scores frame-v1, guarda n>=200) [Wave 2]
+- [ ] 02-03-PLAN.md — Loader retrocompatible (+ fix metadata frame-v1 con artifact_files) + contrato API frame-v1 (schemas sin default silencioso, respuesta enriquecida) [Wave 3]
 
 ### Fase 3: Wiring del Scorer e Integración Platform
 **Goal**: El scorer en vivo despacha al `FrameV1FeatureCalculator` usando los artefactos de Fase 2; Rails envía `facility_time_zone_iana` en cada request real-time; `AlertManager` persiste la metadata de alerta ampliada; el universo `scorable?` está alineado entre batch y real-time.
@@ -125,7 +125,7 @@ Fases ejecutan en orden estricto: 0 → 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 0. Baseline Freeze y Bug Triage | 3/3 | ✓ Complete | 2026-07-06 |
 | 1. Artefacto de Stats y Feature Calculator | 3/3 | ✓ Complete | 2026-07-06 |
-| 2. Calibración Segmentada y Contrato API | 0/TBD | Not started | - |
+| 2. Calibración Segmentada y Contrato API | 0/3 | Planned | - |
 | 3. Wiring del Scorer e Integración Platform | 0/TBD | Not started | - |
 | 4. Shadow Dual-Run y Validación de Sesgo | 0/TBD | Not started | - |
 | 5. Cola HITL y Captura de Etiquetas | 0/TBD | Not started | - |
