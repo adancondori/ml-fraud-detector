@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-07-06)
 
 **Core value:** El ranking de anomalías refleja comportamiento relativo al contexto de la facility (moneda, escala, hora local), no tamaño nominal ni artefactos UTC — medido por reducción de sesgo (top-5% monto <4×, off-hours local ~4–5%), no por AUC.
-**Current focus:** Fase 4 — Shadow/Dual-Run (Fase 3 completa)
+**Current focus:** Fase 5 — Cola HITL y Captura de Etiquetas (05-01, 05-02 pendientes; 05-03 completo)
 
 ## Current Position
 
-Phase: 4 of 6 (Shadow/Dual-Run y Validación de Sesgo)
-Plan: 2 of 2 en Fase 4 (04-02 código completo — checkpoint PENDING_DATA)
-Status: PENDING_DATA — 04-02 código entregado (shadow_monitor.py + shadow_gate.py, 31 tests verdes); gate real diferido hasta ≥2 semanas de shadow data; checkpoint Task 3 en espera
-Last activity: 2026-07-06 — Completado 04-02-PLAN.md (Tasks 1+2): shadow_monitor.py (4 métricas robustas), shadow_gate.py (guard INSUFFICIENT_DATA, Spearman scipy, exit 0/1/2), 31 tests. Checkpoint PENDING_DATA pausado.
+Phase: 5 of 6 (Cola HITL y Captura de Etiquetas)
+Plan: 3 of 3 en Fase 5 (05-03 completo; 05-01 y 05-02 pendientes de ejecución)
+Status: In progress — 05-03 completo (hitl_queue_builder.py + 12 tests + metodología FN); 05-01/05-02 pendientes
+Last activity: 2026-07-06 — Completado 05-03-PLAN.md: hitl_queue_builder.py (exportador operativo HITL-01, compute_counts, resolve_p50, build_hitl_queue, write_output), 12 tests verdes con ClickHouse mockeado, docs/hitl_false_negative_methodology.md.
 
-Progress: [██████████] 100% de infraestructura (Fases 0-4, 13/13 planes); Fase 5 HITL pendiente
+Progress: [██████████] Infraestructura scorer (Fases 0-5.03 completas); 05-01/05-02 por ejecutar
 
 ## Performance Metrics
 
@@ -117,8 +117,16 @@ None yet.
 - [04-02]: off-hours aproximado con UTC (horas 0-8, 22-23) como proxy; is_off_hours_loc no persiste en anomaly_scores; tz_missing_rate desde JSON frame_flags solo para shadow_new.
 - [04-02]: Import lazy de shadow_monitor en evaluate_gate() (sys.path insert) para evitar dependencia circular en tests y facilitar uso standalone.
 
+### New Decisions (05-03)
+
+- [05-03]: compute_counts replica exactamente el reparto de HitlQueueQuery (05-01): capacity mode = floor(capacity*(1-pct)) top + remainder below; absolute mode = top_k + max(1, ceil(top_k*pct)) below. Función pura sin I/O.
+- [05-03]: resolve_p50 no usa FINAL en la query (coherente con shadow_monitor.py — consistencia de patrón sobre WRITE local).
+- [05-03]: top_factors exportado como String JSON crudo desde anomaly_scores; no re-derivado en el builder.
+- [05-03]: hitl_queue_builder.py es OPERATIVO (ClickHouse live) — no unificado con hitl_export_alerts.py/hitl_ingest_labels.py (pipeline offline/parquet). Solo reutiliza vocabulario VALID_CATEGORIES.
+- [05-03]: ENV vars para parámetros operativos: HITL_TOP_K (default 100), HITL_BELOW_P50_PCT (default 0.20); CLI args los sobreescriben.
+
 ## Session Continuity
 
-Last session: 2026-07-06T18:27:17Z
-Stopped at: Checkpoint PENDING_DATA — 04-02 código completo (shadow_monitor.py + shadow_gate.py, 31 tests, lint limpio). Gate real diferido: requiere ≥14 días de shadow data real. Reanudar cuando el operador tenga ≥2 semanas de SCORING_MODE=shadow_dual activo.
+Last session: 2026-07-06T19:34:41Z
+Stopped at: Completado 05-03-PLAN.md — hitl_queue_builder.py (exportador operativo HITL-01, 12 tests verdes, docs/hitl_false_negative_methodology.md). Fase 5 en progreso: faltan 05-01 (HitlQueueQuery Rails) y 05-02 (HitlLabelForm).
 Resume file: None
