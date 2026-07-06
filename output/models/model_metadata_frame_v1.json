@@ -1,0 +1,75 @@
+{
+  "feature_version": "frame-v1",
+  "feature_names": [
+    "log_amount_fac",
+    "discount_ratio",
+    "has_tip",
+    "hour_sin_loc",
+    "hour_cos_loc",
+    "dow_sin_loc",
+    "dow_cos_loc",
+    "is_weekend_loc",
+    "is_off_hours_loc",
+    "time_since_last_txn",
+    "user_amount_24h_fac",
+    "user_distinct_facilities_30d",
+    "user_distinct_methods",
+    "amount_facility_ratio",
+    "is_club_credit",
+    "user_debit_count_30d",
+    "user_debit_amount_30d_fac",
+    "credit_flow_ratio",
+    "is_staff",
+    "paid_by_manager",
+    "staff_amount_zscore",
+    "category_entropy_30d",
+    "user_merchandise_ratio_30d",
+    "small_amount_at_facility",
+    "very_small_amount_at_facility",
+    "off_hours_high_value_loc",
+    "gateway_change_recent",
+    "is_main_gateway",
+    "is_first_gateway_for_user",
+    "source_change_recent"
+  ],
+  "n_features": 30,
+  "model_recipe": {
+    "n_estimators": 200,
+    "max_samples": 512,
+    "max_features": 0.6,
+    "contamination": "auto",
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "scaler_config": {
+    "class": "RobustScaler",
+    "quantile_range": [
+      5.0,
+      95.0
+    ],
+    "post_transform_clip": [
+      -10,
+      10
+    ]
+  },
+  "train_rows": 3137083,
+  "built_at": "2026-07-06T06:22:26.821118+00:00",
+  "stats_artifact": "facility_stats_v1.json",
+  "batch_calculator_parity_maxdiff": 0.0,
+  "parity_check": {
+    "status": "PASS",
+    "tol": 1e-08,
+    "n_rows": 3213,
+    "n_facilities": 680,
+    "max_diff": 0.0
+  },
+  "bias_metrics": {
+    "top5_amount_ratio": 7.171294,
+    "gate1_pass": false,
+    "off_hours_local_pct": 0.064626,
+    "off_hours_utc_pct": 0.297771,
+    "gate2_pass": true,
+    "n_val_rows": 1130117,
+    "all_gates_pass": false
+  }
+}
