@@ -80,17 +80,26 @@ def golden_rows() -> pd.DataFrame:
 def _row_to_payment(row) -> dict:
     """Construir dict de pago desde una fila del parquet enriquecido.
 
-    amount en el parquet ya está en USD (normalizado por FeatureEngineer).
-    calculate() espera reservation_paid_out en moneda original; para paridad,
-    usamos amount (ya USD) con currency='USD' para evitar doble conversión.
+    El parquet almacena amount ya en USD (normalizado por FeatureEngineer).
+    Para que calculate() reproduzca exactamente el mismo vector que calculate_from_row():
+    - Pasar el amount ya en USD con currency='USD' → evita doble conversión
+    - Para staff_amount_zscore: el artefacto (feature_engineer.joblib) almacena
+      stats por moneda original. Pasamos original_currency como campo adicional
+      para que _compute_frame_features haga el lookup correcto.
+    - discount: reconstituido como discount_ratio * max(amount, 0.01) para
+      reproducir el mismo discount_ratio que el parquet pre-computó.
     """
+    amount = float(row.get("amount", 0) or 0)
+    dr = float(row.get("discount_ratio", 0) or 0)
+    discount_reconstituted = dr * max(amount, 0.01)
+    original_currency = str(row.get("currency", "USD") or "USD").upper()
     return {
-        "reservation_paid_out": float(row.get("amount", 0) or 0),
+        "reservation_paid_out": amount,
         "created_at": row["created_at"],
         "facility_id": int(row["facility_id"]),
-        "currency": "USD",  # amount ya en USD, evitar doble conversión
-        "discount": float(row.get("discount_ratio", 0) or 0)
-        * float(row.get("amount", 0) or 0),
+        "currency": "USD",           # amount ya en USD, sin doble conversión
+        "original_currency": original_currency,  # para staff z-score lookup
+        "discount": discount_reconstituted,
         "tip": 1.0 if float(row.get("has_tip", 0) or 0) > 0 else 0.0,
         "club_credit_flag": bool(int(row.get("is_club_credit", 0) or 0)),
         "paid_by_manager": bool(int(row.get("paid_by_manager", 0) or 0)),
