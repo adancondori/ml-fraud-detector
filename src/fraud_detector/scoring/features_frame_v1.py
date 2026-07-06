@@ -1,4 +1,4 @@
-"""FrameV1FeatureCalculator — feature calculator for FS-frame-v1 (30 features).
+"""FrameV1FeatureCalculator — feature calculator for FS-frame-v1 (31 features).
 
 Frame-normalized: magnitude features are relative to per-facility distribution
 (not USD absolute), temporal features use local IANA time with DST (not UTC).
@@ -26,7 +26,7 @@ from fraud_detector.scoring.context import UserContext
 from fraud_detector.utils.currency import normalize_amount_value
 
 # ---------------------------------------------------------------------------
-# Feature contract — FS-frame-v1 (30 features, fuente canónica: frame_version(DISJOINT30))
+# Feature contract — FS-frame-v1 (31 features, fuente canónica: frame_version(DISJOINT31))
 # ---------------------------------------------------------------------------
 
 FRAME_V1_FEATURE_NAMES = [
@@ -44,6 +44,7 @@ FRAME_V1_FEATURE_NAMES = [
     "user_distinct_facilities_30d",
     "user_distinct_methods",
     "amount_facility_ratio",       # amount / (fmean + 0.01)
+    "amount_fac_z",                # (amount - facility_median) / iqr_guarded  [ablación sesgo]
     "is_club_credit",
     "user_debit_count_30d",
     "user_debit_amount_30d_fac",   # user_debit_amount_30d / (fmean + 0.01)
@@ -62,8 +63,8 @@ FRAME_V1_FEATURE_NAMES = [
     "source_change_recent",
 ]
 
-assert len(FRAME_V1_FEATURE_NAMES) == 30, (
-    f"FS-frame-v1 contract violated: expected 30 features, got {len(FRAME_V1_FEATURE_NAMES)}"
+assert len(FRAME_V1_FEATURE_NAMES) == 31, (
+    f"FS-frame-v1 contract violated: expected 31 features, got {len(FRAME_V1_FEATURE_NAMES)}"
 )
 
 # ---------------------------------------------------------------------------
@@ -204,7 +205,7 @@ class FrameV1FeatureCalculator:
     ) -> np.ndarray:
         """Única implementación de la aritmética de marco.
 
-        Recibe primitivos; retorna np.ndarray de shape (30,) en orden FRAME_V1_FEATURE_NAMES.
+        Recibe primitivos; retorna np.ndarray de shape (31,) en orden FRAME_V1_FEATURE_NAMES.
         """
         # 1. Lookup facility stats (mean, median, iqr_guarded, iana_tz)
         fmean, fmedian, iqr_guarded, iana_tz = self._lookup_facility(facility_id)
@@ -212,6 +213,9 @@ class FrameV1FeatureCalculator:
         # 2. Magnitud relativa a facility
         log_amount_fac = math.log1p(amount_usd / (fmean + 0.01))
         amount_facility_ratio = amount_usd / (fmean + 0.01)
+        # z-score robusto IQR-guarded: (amount - median) / iqr_guarded
+        # iqr_guarded = max(iqr, 1.0) — garantiza denominador >= 1.0 (decisión 01-01)
+        amount_fac_z = (amount_usd - fmedian) / iqr_guarded
         user_amount_24h_fac = user_amount_24h / (fmean + 0.01)
         user_debit_amount_30d_fac = user_debit_amount_30d / (fmean + 0.01)
 
@@ -253,6 +257,7 @@ class FrameV1FeatureCalculator:
             float(user_distinct_facilities_30d),
             float(user_distinct_methods),
             amount_facility_ratio,
+            amount_fac_z,
             float(is_club_credit),
             float(user_debit_count_30d),
             user_debit_amount_30d_fac,

@@ -135,8 +135,8 @@ class TestFrameV1FeatureNames:
     """Verificar el contrato del feature set FS-frame-v1."""
 
     def test_feature_names_count(self):
-        assert len(FRAME_V1_FEATURE_NAMES) == 30, (
-            f"FRAME_V1_FEATURE_NAMES tiene {len(FRAME_V1_FEATURE_NAMES)} features, esperado 30"
+        assert len(FRAME_V1_FEATURE_NAMES) == 31, (
+            f"FRAME_V1_FEATURE_NAMES tiene {len(FRAME_V1_FEATURE_NAMES)} features, esperado 31"
         )
 
     def test_feature_names_unique(self):
@@ -149,8 +149,8 @@ class TestFrameV1FeatureNames:
         required = [
             "log_amount_fac", "hour_sin_loc", "hour_cos_loc",
             "dow_sin_loc", "dow_cos_loc", "is_weekend_loc", "is_off_hours_loc",
-            "amount_facility_ratio", "user_amount_24h_fac", "user_debit_amount_30d_fac",
-            "off_hours_high_value_loc", "staff_amount_zscore",
+            "amount_facility_ratio", "amount_fac_z", "user_amount_24h_fac",
+            "user_debit_amount_30d_fac", "off_hours_high_value_loc", "staff_amount_zscore",
         ]
         for feat in required:
             assert feat in FRAME_V1_FEATURE_NAMES, f"Feature canónica faltante: {feat}"
@@ -178,13 +178,13 @@ class TestFrameV1Calculator:
         payment = _row_to_payment(row)
         context = _row_to_context(row)
         vec = frame_calc.calculate(payment, context)
-        assert vec.shape == (30,), f"Esperado (30,), obtenido {vec.shape}"
+        assert vec.shape == (31,), f"Esperado (31,), obtenido {vec.shape}"
 
     def test_calculate_from_row_returns_shape_30(self, golden_rows, frame_calc):
         """calculate_from_row() produce vector de shape (30,)."""
         row = golden_rows.iloc[0]
         vec = frame_calc.calculate_from_row(row)
-        assert vec.shape == (30,), f"Esperado (30,), obtenido {vec.shape}"
+        assert vec.shape == (31,), f"Esperado (31,), obtenido {vec.shape}"
 
     def test_frame_features_parity(self, golden_rows, frame_calc):
         """calculate() == calculate_from_row() para >=100 pagos, diff <1e-8."""
@@ -221,7 +221,7 @@ class TestFrameV1Calculator:
         assert "time_zone" not in row.index, "time_zone debe estar ausente del row"
         # No debe levantar KeyError ni excepción
         vec = frame_calc.calculate_from_row(row)
-        assert vec.shape == (30,), f"Esperado (30,), obtenido {vec.shape}"
+        assert vec.shape == (31,), f"Esperado (31,), obtenido {vec.shape}"
         assert not np.any(np.isnan(vec)), "El vector no debe contener NaN"
 
     def test_magnitude_relative_to_facility(self, golden_rows, frame_calc, facility_stats):
