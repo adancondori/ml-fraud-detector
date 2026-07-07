@@ -3,6 +3,7 @@
 Uses synthetic data to verify statistical tests, discrimination metrics,
 top-k concentration, model comparison, and Holm-Bonferroni correction.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -82,7 +83,15 @@ def test_mann_whitney_random_scores_fails_he1(random_scores):
 def test_mann_whitney_returns_all_keys(perfect_separation):
     scores, proxy = perfect_separation
     result = run_mann_whitney(scores, proxy)
-    expected_keys = {"U_statistic", "p_value", "rank_biserial_r", "cles", "n_anomaly", "n_normal", "he1_pass"}
+    expected_keys = {
+        "U_statistic",
+        "p_value",
+        "rank_biserial_r",
+        "cles",
+        "n_anomaly",
+        "n_normal",
+        "he1_pass",
+    }
     assert expected_keys.issubset(result.keys())
 
 
@@ -133,6 +142,7 @@ def test_topk_returns_all_k_values(perfect_separation):
 def test_bootstrap_ci_lower_leq_mean_leq_upper(perfect_separation):
     scores, proxy = perfect_separation
     from sklearn.metrics import roc_auc_score
+
     result = bootstrap_ci(proxy, scores, roc_auc_score, n_iterations=100)
     assert result["lower"] <= result["mean"] <= result["upper"]
 
@@ -141,6 +151,7 @@ def test_bootstrap_ci_backwards_compat(perfect_separation):
     """Sin user_ids el dict NO debe contener `cluster_unit` (back-compat estricta)."""
     scores, proxy = perfect_separation
     from sklearn.metrics import roc_auc_score
+
     result = bootstrap_ci(proxy, scores, roc_auc_score, n_iterations=100, random_seed=42)
     assert "cluster_unit" not in result
     assert "n_clusters_resampled" not in result
@@ -158,10 +169,15 @@ def test_bootstrap_ci_by_user_bounds():
     proxy = (rng.random(n) < 0.15).astype(np.int8)
     scores = rng.random(n) + 0.2 * proxy  # leve señal
     from sklearn.metrics import roc_auc_score
+
     res = bootstrap_ci(
-        proxy, scores, roc_auc_score,
-        n_iterations=200, random_seed=42,
-        user_ids=user_ids, method="weighted",
+        proxy,
+        scores,
+        roc_auc_score,
+        n_iterations=200,
+        random_seed=42,
+        user_ids=user_ids,
+        method="weighted",
     )
     assert res["lower"] <= res["mean"] <= res["upper"]
     assert res["cluster_unit"] == "user"
@@ -179,15 +195,24 @@ def test_bootstrap_ci_weighted_vs_concatenate_close():
     proxy = (rng.random(n) < 0.1).astype(np.int8)
     scores = rng.random(n) + 0.3 * proxy
     from sklearn.metrics import roc_auc_score
+
     res_w = bootstrap_ci(
-        proxy, scores, roc_auc_score,
-        n_iterations=500, random_seed=42,
-        user_ids=user_ids, method="weighted",
+        proxy,
+        scores,
+        roc_auc_score,
+        n_iterations=500,
+        random_seed=42,
+        user_ids=user_ids,
+        method="weighted",
     )
     res_c = bootstrap_ci(
-        proxy, scores, roc_auc_score,
-        n_iterations=500, random_seed=42,
-        user_ids=user_ids, method="concatenate",
+        proxy,
+        scores,
+        roc_auc_score,
+        n_iterations=500,
+        random_seed=42,
+        user_ids=user_ids,
+        method="concatenate",
     )
     assert abs(res_w["mean"] - res_c["mean"]) < 0.005
     # ambos identifican el mismo cluster_unit
@@ -260,7 +285,9 @@ def test_full_evaluation_with_dates():
     """Temporal stability with 2 months of data."""
     rng = np.random.default_rng(42)
     n = 1000
-    proxy = np.concatenate([np.ones(100), np.zeros(400), np.ones(100), np.zeros(400)]).astype(np.int8)
+    proxy = np.concatenate([np.ones(100), np.zeros(400), np.ones(100), np.zeros(400)]).astype(
+        np.int8
+    )
     scores = np.where(proxy == 1, rng.normal(5, 1, n), rng.normal(0, 1, n)).astype(np.float32)
     dates = np.array(
         [np.datetime64("2025-09-15")] * 500 + [np.datetime64("2025-10-15")] * 500,

@@ -71,9 +71,9 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         for fid_str, entry in result["by_facility"].items():
-            assert entry["n"] >= SegmentedThresholdCalibrator.MIN_N, (
-                f"facility {fid_str} has n={entry['n']} < MIN_N"
-            )
+            assert (
+                entry["n"] >= SegmentedThresholdCalibrator.MIN_N
+            ), f"facility {fid_str} has n={entry['n']} < MIN_N"
 
     def test_all_currency_entries_have_n_ge_min_n(self):
         """Every entry in by_currency must have n >= MIN_N."""
@@ -81,9 +81,9 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         for cur_str, entry in result["by_currency"].items():
-            assert entry["n"] >= SegmentedThresholdCalibrator.MIN_N, (
-                f"currency {cur_str} has n={entry['n']} < MIN_N"
-            )
+            assert (
+                entry["n"] >= SegmentedThresholdCalibrator.MIN_N
+            ), f"currency {cur_str} has n={entry['n']} < MIN_N"
 
     def test_root_keys_binary_threshold_and_score_percentiles_exist(self):
         """Root keys binary_threshold and score_percentiles must exist (backward-compat)."""
@@ -98,9 +98,9 @@ class TestSegmentedThresholdCalibrator:
         scores, fids, curs = _make_calibrator_inputs()
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
-        assert len(result["score_percentiles"]) == 1001, (
-            f"Expected 1001 global LUT points, got {len(result['score_percentiles'])}"
-        )
+        assert (
+            len(result["score_percentiles"]) == 1001
+        ), f"Expected 1001 global LUT points, got {len(result['score_percentiles'])}"
 
     def test_segment_lut_has_201_points(self):
         """Each segment LUT must have exactly 201 points (compact)."""
@@ -108,13 +108,13 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         for fid_str, entry in result["by_facility"].items():
-            assert len(entry["score_percentiles"]) == 201, (
-                f"facility {fid_str} LUT has {len(entry['score_percentiles'])} points, expected 201"
-            )
+            assert (
+                len(entry["score_percentiles"]) == 201
+            ), f"facility {fid_str} LUT has {len(entry['score_percentiles'])} points, expected 201"
         for cur_str, entry in result["by_currency"].items():
-            assert len(entry["score_percentiles"]) == 201, (
-                f"currency {cur_str} LUT has {len(entry['score_percentiles'])} points, expected 201"
-            )
+            assert (
+                len(entry["score_percentiles"]) == 201
+            ), f"currency {cur_str} LUT has {len(entry['score_percentiles'])} points, expected 201"
 
     def test_global_threshold_matches_np_percentile(self):
         """Global binary_threshold must equal np.percentile(scores, percentile)."""
@@ -125,9 +125,9 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs, percentile=95.0)
         expected = float(np.percentile(scores, 95.0))
-        assert abs(result["binary_threshold"] - expected) < 1e-9, (
-            f"binary_threshold={result['binary_threshold']} != np.percentile={expected}"
-        )
+        assert (
+            abs(result["binary_threshold"] - expected) < 1e-9
+        ), f"binary_threshold={result['binary_threshold']} != np.percentile={expected}"
 
     def test_fallback_level_facility(self):
         """Entries in by_facility must have fallback_level='facility'."""
@@ -135,9 +135,9 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         for fid_str, entry in result["by_facility"].items():
-            assert entry["fallback_level"] == "facility", (
-                f"facility {fid_str} fallback_level={entry['fallback_level']!r}"
-            )
+            assert (
+                entry["fallback_level"] == "facility"
+            ), f"facility {fid_str} fallback_level={entry['fallback_level']!r}"
 
     def test_fallback_level_currency(self):
         """Entries in by_currency must have fallback_level='currency'."""
@@ -145,9 +145,9 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         for cur_str, entry in result["by_currency"].items():
-            assert entry["fallback_level"] == "currency", (
-                f"currency {cur_str} fallback_level={entry['fallback_level']!r}"
-            )
+            assert (
+                entry["fallback_level"] == "currency"
+            ), f"currency {cur_str} fallback_level={entry['fallback_level']!r}"
 
     def test_metadata_keys_present(self):
         """Required metadata keys must be present at root level."""
@@ -155,9 +155,15 @@ class TestSegmentedThresholdCalibrator:
         cal = SegmentedThresholdCalibrator()
         result = cal.fit(scores, fids, curs)
         required_meta = {
-            "schema_version", "model_version", "feature_version",
-            "calibration_source", "calibration_rows", "min_n_threshold",
-            "percentile", "threshold_version", "built_at",
+            "schema_version",
+            "model_version",
+            "feature_version",
+            "calibration_source",
+            "calibration_rows",
+            "min_n_threshold",
+            "percentile",
+            "threshold_version",
+            "built_at",
         }
         missing = required_meta - set(result.keys())
         assert not missing, f"Missing metadata keys: {missing}"
@@ -296,4 +302,5 @@ class TestSegmentedThresholdClassifier:
     def test_legacy_threshold_classifier_still_present(self):
         """ThresholdClassifier (legacy) must still be importable from classifier.py."""
         from fraud_detector.scoring.classifier import ThresholdClassifier  # noqa: F401
+
         assert ThresholdClassifier is not None

@@ -85,9 +85,7 @@ class SegmentedThresholdCalibrator:
                 "binary_threshold": float(np.percentile(seg_scores, percentile)),
                 "n": n,
                 "fallback_level": "facility",
-                "score_percentiles": np.percentile(
-                    seg_scores, np.linspace(0, 100, 201)
-                ).tolist(),
+                "score_percentiles": np.percentile(seg_scores, np.linspace(0, 100, 201)).tolist(),
             }
 
         # --- By-currency ---
@@ -103,9 +101,7 @@ class SegmentedThresholdCalibrator:
                 "binary_threshold": float(np.percentile(seg_scores, percentile)),
                 "n": n,
                 "fallback_level": "currency",
-                "score_percentiles": np.percentile(
-                    seg_scores, np.linspace(0, 100, 201)
-                ).tolist(),
+                "score_percentiles": np.percentile(seg_scores, np.linspace(0, 100, 201)).tolist(),
             }
 
         return {

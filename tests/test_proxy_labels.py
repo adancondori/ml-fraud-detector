@@ -3,6 +3,7 @@
 TDD contract: ProxyLabeler must support Tipos A-E and proxy unificado
 as defined in PLAN-FINAL/01_CONTRATO_ALCANCE.md (v2.1, 2026-04-15).
 """
+
 import numpy as np
 import pandas as pd
 import pytest

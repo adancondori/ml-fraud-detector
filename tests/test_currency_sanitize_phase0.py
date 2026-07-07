@@ -4,6 +4,7 @@ Verifica que tanto engineering.py (línea ~646) como DataManager._sanitize_curre
 (loader.py) mapeen correctamente los valores problemáticos a USD, y que el loader
 emita un warning con el conteo de filas afectadas cuando encuentra al menos un EMPTY.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -14,33 +15,35 @@ import pytest
 # Test 1: ingeniería de features — replace inline en preprocessing
 # ---------------------------------------------------------------------------
 
+
 def test_engineering_currency_empty_sanitized():
     """La lógica de replace en engineering.py:~646 debe mapear EMPTY/'' a USD."""
     s = pd.Series(["EMPTY", "", "usd", None])
-    result = (
-        s.fillna("USD").astype(str).str.upper()
-        .replace({"EMPTY": "USD", "": "USD"})
-    )
-    assert list(result) == ["USD", "USD", "USD", "USD"], (
-        f"Engineering replace fallló: {list(result)}"
-    )
+    result = s.fillna("USD").astype(str).str.upper().replace({"EMPTY": "USD", "": "USD"})
+    assert list(result) == [
+        "USD",
+        "USD",
+        "USD",
+        "USD",
+    ], f"Engineering replace fallló: {list(result)}"
 
 
 def test_engineering_currency_already_valid_unchanged():
     """Monedas válidas (AED, ARS, EUR) no deben ser alteradas."""
     s = pd.Series(["AED", "ars", "EUR", "usd"])
-    result = (
-        s.fillna("USD").astype(str).str.upper()
-        .replace({"EMPTY": "USD", "": "USD"})
-    )
-    assert list(result) == ["AED", "ARS", "EUR", "USD"], (
-        f"Monedas válidas alteradas: {list(result)}"
-    )
+    result = s.fillna("USD").astype(str).str.upper().replace({"EMPTY": "USD", "": "USD"})
+    assert list(result) == [
+        "AED",
+        "ARS",
+        "EUR",
+        "USD",
+    ], f"Monedas válidas alteradas: {list(result)}"
 
 
 # ---------------------------------------------------------------------------
 # Test 2: DataManager._sanitize_currency (helper estático en loader.py)
 # ---------------------------------------------------------------------------
+
 
 def test_loader_sanitize_currency_maps_empty_to_usd():
     """DataManager._sanitize_currency debe mapear EMPTY, '', None -> USD."""
@@ -75,12 +78,8 @@ def test_loader_sanitize_currency_warning_with_count():
         loguru_logger.remove(sink_id)
 
     # El warning debe haberse emitido y mencionar el conteo 3 (2 EMPTY + 1 '')
-    assert len(captured) >= 1, (
-        "Se esperaba al menos un warning logueado; ninguno capturado."
-    )
-    assert any("3" in str(m) for m in captured), (
-        f"Warning no menciona conteo=3: {captured}"
-    )
+    assert len(captured) >= 1, "Se esperaba al menos un warning logueado; ninguno capturado."
+    assert any("3" in str(m) for m in captured), f"Warning no menciona conteo=3: {captured}"
     # Verificar que el resultado es correcto
     assert list(result) == ["USD", "USD", "USD", "USD"]
 
@@ -102,21 +101,20 @@ def test_loader_sanitize_currency_no_warning_when_clean():
     finally:
         loguru_logger.remove(sink_id)
 
-    assert len(captured) == 0, (
-        f"Warning inesperado cuando no hay EMPTY: {captured}"
-    )
+    assert len(captured) == 0, f"Warning inesperado cuando no hay EMPTY: {captured}"
 
 
 # ---------------------------------------------------------------------------
 # Test 3: confirmación de datos actuales — 0 filas EMPTY en parquets procesados
 # ---------------------------------------------------------------------------
 
+
 def test_data_quality_zero_empty_currency_in_train(tmp_path):
     """Confirmación de calidad de datos: 0 filas EMPTY en train_raw.parquet actual."""
     import os
+
     parquet_path = os.path.join(
-        os.path.dirname(__file__),
-        "..", "data", "processed", "train_raw.parquet"
+        os.path.dirname(__file__), "..", "data", "processed", "train_raw.parquet"
     )
     if not os.path.exists(parquet_path):
         pytest.skip("train_raw.parquet no disponible en este entorno")
@@ -132,9 +130,9 @@ def test_data_quality_zero_empty_currency_in_train(tmp_path):
 def test_data_quality_zero_empty_currency_in_val():
     """Confirmación de calidad de datos: 0 filas EMPTY en val_raw.parquet actual."""
     import os
+
     parquet_path = os.path.join(
-        os.path.dirname(__file__),
-        "..", "data", "processed", "val_raw.parquet"
+        os.path.dirname(__file__), "..", "data", "processed", "val_raw.parquet"
     )
     if not os.path.exists(parquet_path):
         pytest.skip("val_raw.parquet no disponible en este entorno")

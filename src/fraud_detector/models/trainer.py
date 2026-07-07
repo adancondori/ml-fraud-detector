@@ -4,6 +4,7 @@ Supports Isolation Forest, LOF (novelty=True), and One-Class SVM.
 Score convention: higher = more anomalous (negate decision_function).
 Grid search with checkpoint/resume. Multi-seed variability analysis.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,8 +46,7 @@ class ModelTrainer:
     ) -> None:
         if model_type not in self.MODEL_REGISTRY:
             raise ValueError(
-                f"Unknown model type '{model_type}'. "
-                f"Available: {list(self.MODEL_REGISTRY)}"
+                f"Unknown model type '{model_type}'. " f"Available: {list(self.MODEL_REGISTRY)}"
             )
         self.model_type = model_type
         self.model_params = model_params or {}
@@ -80,9 +80,7 @@ class ModelTrainer:
         params.update(self.model_params)
         self.model = self.MODEL_REGISTRY[self.model_type](**params)
         self.model.fit(X_train)
-        logger.info(
-            f"Fitted {self.model_type} on {len(X_train):,} rows"
-        )
+        logger.info(f"Fitted {self.model_type} on {len(X_train):,} rows")
         return self
 
     def score_samples(self, X: np.ndarray) -> np.ndarray:
@@ -90,9 +88,7 @@ class ModelTrainer:
         if self.model is None:
             raise ValueError("Model not trained. Call fit() first.")
         if not hasattr(self.model, "score_samples"):
-            raise ValueError(
-                f"Model '{self.model_type}' does not expose score_samples()"
-            )
+            raise ValueError(f"Model '{self.model_type}' does not expose score_samples()")
         raw_scores = self.model.score_samples(X)
         return (-np.asarray(raw_scores, dtype=np.float64)).astype(np.float32)
 
@@ -180,15 +176,11 @@ class ModelTrainer:
             existing = pd.read_csv(checkpoint_path)
             results = existing.to_dict("records")
             completed = len(results)
-            logger.info(
-                f"Resuming IF grid search from combo {completed}/{len(all_combos)}"
-            )
+            logger.info(f"Resuming IF grid search from combo {completed}/{len(all_combos)}")
 
         for i, params in enumerate(all_combos[completed:], start=completed):
             t0 = time.perf_counter()
-            model = IsolationForest(
-                random_state=random_state, n_jobs=-1, **params
-            )
+            model = IsolationForest(random_state=random_state, n_jobs=-1, **params)
             model.fit(X_train)
             scores_val = -model.score_samples(X_val)
             auc = float(roc_auc_score(y_val_proxy, scores_val))
@@ -237,14 +229,14 @@ class ModelTrainer:
             auc = float(roc_auc_score(y_val_proxy, scores_val))
             elapsed = time.perf_counter() - t0
 
-            results.append({
-                "n_neighbors": n_neighbors,
-                "auc_roc": auc,
-                "time_seconds": round(elapsed, 2),
-            })
-            logger.info(
-                f"LOF n_neighbors={n_neighbors}: AUC={auc:.6f} ({elapsed:.1f}s)"
+            results.append(
+                {
+                    "n_neighbors": n_neighbors,
+                    "auc_roc": auc,
+                    "time_seconds": round(elapsed, 2),
+                }
             )
+            logger.info(f"LOF n_neighbors={n_neighbors}: AUC={auc:.6f} ({elapsed:.1f}s)")
 
         return pd.DataFrame(results)
 
@@ -297,7 +289,8 @@ class ModelTrainer:
         for seed in seeds:
             # Filter out non-IF params like contamination from best_params
             model_params = {
-                k: v for k, v in best_params.items()
+                k: v
+                for k, v in best_params.items()
                 if k in ("n_estimators", "max_samples", "max_features")
             }
             model = IsolationForest(

@@ -3,6 +3,7 @@
 All functions receive pre-computed scores and proxy labels.
 Score convention: higher = more anomalous.
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -60,9 +61,7 @@ def run_mann_whitney(
 
     he1_pass = bool(p_value < alpha and r > min_r)
 
-    logger.info(
-        f"HE1: U={U:.0f}, p={p_value:.2e}, r={r:.4f}, CLES={cles:.4f}, pass={he1_pass}"
-    )
+    logger.info(f"HE1: U={U:.0f}, p={p_value:.2e}, r={r:.4f}, CLES={cles:.4f}, pass={he1_pass}")
     return {
         "U_statistic": float(U),
         "p_value": float(p_value),
@@ -215,8 +214,7 @@ def compare_models(
     for metric in metric_names:
         if_val = if_metrics.get(metric, 0)
         others_best = max(
-            metrics_by_model[m].get(metric, 0)
-            for m in model_scores if m != "isolation_forest"
+            metrics_by_model[m].get(metric, 0) for m in model_scores if m != "isolation_forest"
         )
         if if_val >= others_best:
             if_wins += 1
@@ -224,9 +222,7 @@ def compare_models(
 
     he4_pass = bool(if_wins >= min_wins)
 
-    logger.info(
-        f"HE4: IF wins {if_wins}/4 metrics {if_wins_on}, pass={he4_pass}"
-    )
+    logger.info(f"HE4: IF wins {if_wins}/4 metrics {if_wins_on}, pass={he4_pass}")
     return {
         "metrics_comparison": metrics_by_model,
         "if_wins": if_wins,

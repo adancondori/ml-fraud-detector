@@ -1,4 +1,5 @@
 """Evaluation metrics for unsupervised anomaly scores."""
+
 from __future__ import annotations
 
 import inspect
@@ -54,7 +55,7 @@ def evaluate_scores(
         metrics["auc_roc"] = float(roc_auc_score(y_true, y_scores))
         metrics["ap"] = float(average_precision_score(y_true, y_scores))
 
-    for k_pct in (top_k_percents or settings.top_k_percents_list):
+    for k_pct in top_k_percents or settings.top_k_percents_list:
         label = int(round(k_pct * 100))
         metrics[f"precision_at_{label}pct"] = precision_at_k(y_true, y_scores, k_pct)
         metrics[f"enrichment_factor_at_{label}pct"] = enrichment_factor(
@@ -132,9 +133,7 @@ def bootstrap_ci(
     if method == "auto":
         method = "weighted" if _supports_sample_weight(metric_fn) else "concatenate"
     if method == "weighted" and not _supports_sample_weight(metric_fn):
-        raise ValueError(
-            "method='weighted' requires metric_fn to accept sample_weight"
-        )
+        raise ValueError("method='weighted' requires metric_fn to accept sample_weight")
 
     unique_users, inverse = np.unique(uids, return_inverse=True)
     n_users = int(unique_users.size)

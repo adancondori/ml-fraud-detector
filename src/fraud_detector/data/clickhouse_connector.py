@@ -3,6 +3,7 @@ ClickHouse database connector for fraud detection data extraction.
 Provides secure connection and efficient data retrieval from TechSport database.
 Supports both native protocol (clickhouse-driver) and HTTP protocol (clickhouse-connect).
 """
+
 from __future__ import annotations
 
 from pathlib import Path

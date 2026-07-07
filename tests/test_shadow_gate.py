@@ -5,6 +5,7 @@ All tests use in-memory DataFrames — no ClickHouse connection required.
 Critical invariant: INSUFFICIENT_DATA is returned (not PASS) whenever
 days_span < 14 OR n_rows < 500, regardless of metric values.
 """
+
 from __future__ import annotations
 
 import json
@@ -37,6 +38,7 @@ from shadow_gate import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Synthetic DataFrame builders
 # ---------------------------------------------------------------------------
+
 
 def _make_shadow_df(
     n_per_model: int = 300,
@@ -87,9 +89,7 @@ def _make_shadow_df(
     # ---- Alert rates: shadow_old base rate, shadow_new differs by delta ----
     base_alert_rate = 0.05
     is_anomaly_old = (rng.uniform(size=n) < base_alert_rate).astype(bool)
-    is_anomaly_new = (
-        rng.uniform(size=n) < (base_alert_rate + alert_rate_delta)
-    ).astype(bool)
+    is_anomaly_new = (rng.uniform(size=n) < (base_alert_rate + alert_rate_delta)).astype(bool)
 
     # ---- Timestamps ----
     ts_offsets_old = rng.integers(0, total_seconds, size=n)
@@ -101,28 +101,32 @@ def _make_shadow_df(
     payment_old = [base_ts + pd.Timedelta(hours=12, seconds=int(s % 100)) for s in ts_offsets_old]
     payment_new = [base_ts + pd.Timedelta(hours=12, seconds=int(s % 100)) for s in ts_offsets_new]
 
-    df_old = pd.DataFrame({
-        "payment_id": range(n),
-        "scoring_mode": [SHADOW_OLD] * n,
-        "percentile": pct_old,
-        "amount_usd": amounts_old,
-        "is_anomaly": is_anomaly_old,
-        "currency": ["USD"] * n,
-        "frame_flags": [""] * n,
-        "payment_created_at": payment_old,
-        "scored_at": scored_old,
-    })
-    df_new = pd.DataFrame({
-        "payment_id": range(n),
-        "scoring_mode": [SHADOW_NEW] * n,
-        "percentile": pct_new,
-        "amount_usd": amounts_new,
-        "is_anomaly": is_anomaly_new,
-        "currency": ["USD"] * n,
-        "frame_flags": [json.dumps({"timezone_missing": False})] * n,
-        "payment_created_at": payment_new,
-        "scored_at": scored_new,
-    })
+    df_old = pd.DataFrame(
+        {
+            "payment_id": range(n),
+            "scoring_mode": [SHADOW_OLD] * n,
+            "percentile": pct_old,
+            "amount_usd": amounts_old,
+            "is_anomaly": is_anomaly_old,
+            "currency": ["USD"] * n,
+            "frame_flags": [""] * n,
+            "payment_created_at": payment_old,
+            "scored_at": scored_old,
+        }
+    )
+    df_new = pd.DataFrame(
+        {
+            "payment_id": range(n),
+            "scoring_mode": [SHADOW_NEW] * n,
+            "percentile": pct_new,
+            "amount_usd": amounts_new,
+            "is_anomaly": is_anomaly_new,
+            "currency": ["USD"] * n,
+            "frame_flags": [json.dumps({"timezone_missing": False})] * n,
+            "payment_created_at": payment_new,
+            "scored_at": scored_new,
+        }
+    )
     return pd.concat([df_old, df_new], ignore_index=True)
 
 
@@ -138,9 +142,9 @@ class TestInsufficientDataGuard:
         """days_span=7 must return INSUFFICIENT_DATA even if metrics would pass."""
         df = _make_shadow_df(n_per_model=400, days_span=7)
         result = evaluate_gate(df)
-        assert result["status"] == "INSUFFICIENT_DATA", (
-            f"Expected INSUFFICIENT_DATA for days_span<14, got {result['status']}"
-        )
+        assert (
+            result["status"] == "INSUFFICIENT_DATA"
+        ), f"Expected INSUFFICIENT_DATA for days_span<14, got {result['status']}"
 
     def test_n_rows_less_than_500_gives_insufficient_data(self):
         """n_rows=100 must return INSUFFICIENT_DATA even if temporal span is long."""
@@ -159,10 +163,19 @@ class TestInsufficientDataGuard:
 
     def test_empty_df_gives_insufficient_data(self):
         """Empty DataFrame → INSUFFICIENT_DATA (not an error)."""
-        df = pd.DataFrame(columns=[
-            "payment_id", "scoring_mode", "percentile", "amount_usd",
-            "is_anomaly", "currency", "frame_flags", "payment_created_at", "scored_at",
-        ])
+        df = pd.DataFrame(
+            columns=[
+                "payment_id",
+                "scoring_mode",
+                "percentile",
+                "amount_usd",
+                "is_anomaly",
+                "currency",
+                "frame_flags",
+                "payment_created_at",
+                "scored_at",
+            ]
+        )
         result = evaluate_gate(df)
         assert result["status"] == "INSUFFICIENT_DATA"
 
@@ -171,9 +184,10 @@ class TestInsufficientDataGuard:
         df = _make_shadow_df(n_per_model=300, days_span=21)  # 600 rows, 21 days
         result = evaluate_gate(df)
         # Should return PASS or FAIL — not INSUFFICIENT_DATA
-        assert result["status"] in ("PASS", "FAIL"), (
-            f"Expected PASS or FAIL with sufficient data, got {result['status']}"
-        )
+        assert result["status"] in (
+            "PASS",
+            "FAIL",
+        ), f"Expected PASS or FAIL with sufficient data, got {result['status']}"
 
 
 # ---------------------------------------------------------------------------
@@ -188,9 +202,9 @@ class TestGatePass:
             n_per_model=400,
             days_span=20,
             seed=1,
-            top5_ratio_target=2.0,    # well below 4.0
-            spearman_target=0.98,     # well above 0.90
-            alert_rate_delta=0.005,   # well below 0.02
+            top5_ratio_target=2.0,  # well below 4.0
+            spearman_target=0.98,  # well above 0.90
+            alert_rate_delta=0.005,  # well below 0.02
         )
         result = evaluate_gate(df)
         # Off-hours check may not pass since we use in-hours timestamps (12:00 UTC)
@@ -233,7 +247,7 @@ class TestGateFail:
             n_per_model=400,
             days_span=20,
             seed=4,
-            top5_ratio_target=8.0,    # well above 4.0
+            top5_ratio_target=8.0,  # well above 4.0
             spearman_target=0.98,
             alert_rate_delta=0.005,
         )
@@ -260,17 +274,19 @@ class TestGateFail:
         scored = [base_ts + pd.Timedelta(seconds=int(s)) for s in offsets]
         payment = [base_ts + pd.Timedelta(hours=12, seconds=int(s % 100)) for s in offsets]
 
-        df_new = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_NEW] * n,
-            "percentile": pct,
-            "amount_usd": amounts,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": payment,
-            "scored_at": scored,
-        })
+        df_new = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_NEW] * n,
+                "percentile": pct,
+                "amount_usd": amounts,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": payment,
+                "scored_at": scored,
+            }
+        )
         pct_old = rng.uniform(0, 1, n)
         df_old = df_new.copy()
         df_old["scoring_mode"] = SHADOW_OLD
@@ -295,17 +311,19 @@ class TestComputeSpearman:
         n = 100
         pct = np.linspace(0, 1, n)
         base_ts = pd.Timestamp("2026-06-15")
-        df_old = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_OLD] * n,
-            "percentile": pct,
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": [base_ts] * n,
-            "scored_at": [base_ts] * n,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_OLD] * n,
+                "percentile": pct,
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": [base_ts] * n,
+                "scored_at": [base_ts] * n,
+            }
+        )
         df_new = df_old.copy()
         df_new["scoring_mode"] = SHADOW_NEW
         df = pd.concat([df_old, df_new], ignore_index=True)
@@ -316,17 +334,19 @@ class TestComputeSpearman:
         """Fewer than 30 matched payment_ids → NaN (not a crash)."""
         n = 20  # below threshold of 30
         base_ts = pd.Timestamp("2026-06-15")
-        df_old = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_OLD] * n,
-            "percentile": np.linspace(0, 1, n),
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": [base_ts] * n,
-            "scored_at": [base_ts] * n,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_OLD] * n,
+                "percentile": np.linspace(0, 1, n),
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": [base_ts] * n,
+                "scored_at": [base_ts] * n,
+            }
+        )
         df_new = df_old.copy()
         df_new["scoring_mode"] = SHADOW_NEW
         df = pd.concat([df_old, df_new], ignore_index=True)
@@ -339,17 +359,19 @@ class TestComputeSpearman:
         pct_old = np.linspace(0, 1, n)
         pct_new = np.linspace(1, 0, n)  # reversed
         base_ts = pd.Timestamp("2026-06-15")
-        df_old = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_OLD] * n,
-            "percentile": pct_old,
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": [base_ts] * n,
-            "scored_at": [base_ts] * n,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_OLD] * n,
+                "percentile": pct_old,
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": [base_ts] * n,
+                "scored_at": [base_ts] * n,
+            }
+        )
         df_new = df_old.copy()
         df_new["scoring_mode"] = SHADOW_NEW
         df_new["percentile"] = pct_new
@@ -365,22 +387,22 @@ class TestComputeSpearman:
         noise = rng.normal(0, 0.01, n)  # very small noise
         pct_new = np.clip(pct_old + noise, 0, 1)
         base_ts = pd.Timestamp("2026-06-15")
-        df_old = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_OLD] * n,
-            "percentile": pct_old,
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": [base_ts] * n,
-            "scored_at": [base_ts] * n,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_OLD] * n,
+                "percentile": pct_old,
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": [base_ts] * n,
+                "scored_at": [base_ts] * n,
+            }
+        )
         df_new = df_old.copy()
         df_new["scoring_mode"] = SHADOW_NEW
         df_new["percentile"] = pct_new
         df = pd.concat([df_old, df_new], ignore_index=True)
         rho = compute_spearman(df)
-        assert rho >= GATE_SPEARMAN_MIN, (
-            f"Expected rho >= {GATE_SPEARMAN_MIN}, got {rho:.4f}"
-        )
+        assert rho >= GATE_SPEARMAN_MIN, f"Expected rho >= {GATE_SPEARMAN_MIN}, got {rho:.4f}"

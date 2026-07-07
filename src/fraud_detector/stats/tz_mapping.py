@@ -7,6 +7,7 @@ The base 51 entries are sourced from scripts/exp_frames_improvement.py
 (RAILS_TZ_TO_IANA). The remaining 13 entries are the zones present in
 facility_tz.parquet that were absent from the prototype dict.
 """
+
 from __future__ import annotations
 
 from zoneinfo import ZoneInfo

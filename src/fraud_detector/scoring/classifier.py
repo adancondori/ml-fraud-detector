@@ -28,6 +28,7 @@ RISK_LEVELS = {
 # Module-level helper shared by both classifiers
 # ---------------------------------------------------------------------------
 
+
 def _compute_percentile(score: float, lut: np.ndarray) -> float:
     """Map a score to [0, 1] percentile using a pre-computed LUT.
 
@@ -119,6 +120,7 @@ class ThresholdClassifier:
 # SegmentedThresholdClassifier
 # ---------------------------------------------------------------------------
 
+
 class SegmentedThresholdClassifier:
     """Classifies anomaly scores using a per-segment threshold with fallback chain.
 
@@ -137,9 +139,7 @@ class SegmentedThresholdClassifier:
 
     def __init__(self, config: dict) -> None:
         self._global_threshold: float = float(config["binary_threshold"])
-        self._global_lut: np.ndarray = np.array(
-            config["score_percentiles"], dtype=np.float32
-        )
+        self._global_lut: np.ndarray = np.array(config["score_percentiles"], dtype=np.float32)
         self._by_facility: dict = config.get("by_facility", {})
         self._by_currency: dict = config.get("by_currency", {})
 

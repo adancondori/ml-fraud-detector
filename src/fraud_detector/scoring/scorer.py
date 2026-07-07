@@ -143,9 +143,7 @@ class SingleTransactionScorer:
             facility_id = int(payment.get("facility_id", 0))
             currency = (payment.get("currency") or "USD").upper()
             is_anomaly, risk_level, percentile, fallback_level, calibration_segment = (
-                self._classifier.classify(
-                    raw_score, facility_id=facility_id, currency=currency
-                )
+                self._classifier.classify(raw_score, facility_id=facility_id, currency=currency)
             )
             # Build observability flags — timezone_missing when the facility is absent
             # from the artifact (fallback to Etc/UTC was used in _lookup_facility).

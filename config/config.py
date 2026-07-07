@@ -16,6 +16,7 @@ Proxy taxonomy (5 types, updated 2026-04-15):
   - Tipo E: gratuitas sistematicas (free_pct_30d > 25%, free_count_30d > 10)
   - Proxy unificado: OR(A, B, C, D, E) — evaluacion principal
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,9 +72,9 @@ class Settings(BaseSettings):
     # ── Temporal Split Boundaries ────────────────────────────────
     warm_start: str = "2024-12-01"
     train_start: str = "2025-01-01"
-    train_end: str = "2025-07-01"      # exclusive
-    val_end: str = "2025-09-01"        # exclusive
-    test_end: str = "2026-01-01"       # exclusive
+    train_end: str = "2025-07-01"  # exclusive
+    val_end: str = "2025-09-01"  # exclusive
+    test_end: str = "2026-01-01"  # exclusive
 
     # ── Proxy Label Definitions ──────────────────────────────────
     # Tipo A: reembolso (status-based)

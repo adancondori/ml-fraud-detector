@@ -1,4 +1,5 @@
 """Integration smoke test — full pipeline with synthetic data (no ClickHouse)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -16,26 +17,31 @@ def _make_synthetic_data(n=500, seed=42):
     rng = np.random.default_rng(seed)
     statuses = rng.choice(
         ["captured", "totally_refunded", "refunded_to_credit", ""],
-        size=n, p=[0.80, 0.05, 0.02, 0.13],
+        size=n,
+        p=[0.80, 0.05, 0.02, 0.13],
     )
-    return pd.DataFrame({
-        "id": range(1, n + 1),
-        "user_id": rng.choice(range(1, 51), size=n),
-        "facility_id": rng.choice(range(1, 6), size=n),
-        "created_at": pd.date_range("2025-03-01", periods=n, freq="30min"),
-        "amount": rng.lognormal(mean=3.0, sigma=1.0, size=n).round(2).astype(np.float32),
-        "discount": (rng.random(n) * 5).round(2).astype(np.float32),
-        "tip": (rng.random(n) * 3).round(2).astype(np.float32),
-        "payment_method": rng.choice(["card", "wallet", "club_credit"], size=n),
-        "status": statuses,
-        "currency": "USD",
-        "category": rng.choice(["reservation", "debit", "merchandise", "prepaid"], size=n),
-        "club_credit_flag": rng.choice([True, False], size=n, p=[0.1, 0.9]),
-        "paid_by_manager": rng.choice([0, 1], size=n, p=[0.85, 0.15]).astype(np.int8),
-        "user_role": rng.choice(["player", "court_manager", "teacher"], size=n, p=[0.8, 0.15, 0.05]),
-        "is_staff": np.zeros(n, dtype=np.int8),
-        "user_created_at": pd.Timestamp("2024-06-01"),
-    })
+    return pd.DataFrame(
+        {
+            "id": range(1, n + 1),
+            "user_id": rng.choice(range(1, 51), size=n),
+            "facility_id": rng.choice(range(1, 6), size=n),
+            "created_at": pd.date_range("2025-03-01", periods=n, freq="30min"),
+            "amount": rng.lognormal(mean=3.0, sigma=1.0, size=n).round(2).astype(np.float32),
+            "discount": (rng.random(n) * 5).round(2).astype(np.float32),
+            "tip": (rng.random(n) * 3).round(2).astype(np.float32),
+            "payment_method": rng.choice(["card", "wallet", "club_credit"], size=n),
+            "status": statuses,
+            "currency": "USD",
+            "category": rng.choice(["reservation", "debit", "merchandise", "prepaid"], size=n),
+            "club_credit_flag": rng.choice([True, False], size=n, p=[0.1, 0.9]),
+            "paid_by_manager": rng.choice([0, 1], size=n, p=[0.85, 0.15]).astype(np.int8),
+            "user_role": rng.choice(
+                ["player", "court_manager", "teacher"], size=n, p=[0.8, 0.15, 0.05]
+            ),
+            "is_staff": np.zeros(n, dtype=np.int8),
+            "user_created_at": pd.Timestamp("2024-06-01"),
+        }
+    )
 
 
 @pytest.mark.slow
@@ -72,7 +78,9 @@ def test_full_pipeline_smoke():
     assert np.isfinite(scores).all()
 
     # Evaluate
-    proxy = df_feat["status"].isin(["totally_refunded", "refunded_to_credit"]).astype(np.int8).values
+    proxy = (
+        df_feat["status"].isin(["totally_refunded", "refunded_to_credit"]).astype(np.int8).values
+    )
     if proxy.sum() >= 2:
         metrics = evaluate_scores(proxy, scores)
         assert "auc_roc" in metrics

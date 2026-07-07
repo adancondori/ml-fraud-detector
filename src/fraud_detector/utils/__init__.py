@@ -1,4 +1,5 @@
 """Utility functions and helpers."""
+
 from fraud_detector.utils.logger import (
     logger,
     log_experiment_params,

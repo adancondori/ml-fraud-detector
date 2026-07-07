@@ -244,13 +244,28 @@ class TestBatchScorerDualMode:
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
         fetch_rows = []
         for i in range(n_payments):
-            fetch_rows.append((
-                100 + i, 42 + i, 7, "Test Facility",
-                100.0, datetime(2026, 4, 28, 14, 30, 0),
-                0.0, 0.0, "card", "reservation", False, False,
-                "USD", "paid", 42 + i, datetime(2026, 4, 28, 14, 30, 0),
-                "stripe", "pbp_web",
-            ))
+            fetch_rows.append(
+                (
+                    100 + i,
+                    42 + i,
+                    7,
+                    "Test Facility",
+                    100.0,
+                    datetime(2026, 4, 28, 14, 30, 0),
+                    0.0,
+                    0.0,
+                    "card",
+                    "reservation",
+                    False,
+                    False,
+                    "USD",
+                    "paid",
+                    42 + i,
+                    datetime(2026, 4, 28, 14, 30, 0),
+                    "stripe",
+                    "pbp_web",
+                )
+            )
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]
@@ -258,9 +273,7 @@ class TestBatchScorerDualMode:
         fetch_result.result_rows = fetch_rows
         ctx_result = MagicMock()
         ctx_result.result_rows = []
-        mock_read.query.side_effect = (
-            [cursor_end_result, fetch_result] + [ctx_result] * 6
-        )
+        mock_read.query.side_effect = [cursor_end_result, fetch_result] + [ctx_result] * 6
         return mock_read, cursor_end
 
     def test_dual_mode_produces_two_inserts(self):
@@ -297,9 +310,7 @@ class TestBatchScorerDualMode:
         for insert_call in mock_write.insert.call_args_list:
             rows = insert_call.args[1]
             for row in rows:
-                assert len(row) == 26, (
-                    f"Expected 26 columns, got {len(row)}: {row}"
-                )
+                assert len(row) == 26, f"Expected 26 columns, got {len(row)}: {row}"
 
     def test_dual_model_versions(self):
         """shadow_old rows carry model_version='IF-40-v1'; shadow_new carry 'frame-v1'."""
@@ -362,13 +373,28 @@ class TestDualDedupTokens:
         cursor = datetime(2026, 4, 28, 0, 0, 0, tzinfo=timezone.utc)
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
 
-        fetch_rows = [(
-            101, 42, 7, "Test Facility",
-            100.0, datetime(2026, 4, 28, 14, 30, 0),
-            0.0, 0.0, "card", "reservation", False, False,
-            "USD", "paid", 42, datetime(2026, 4, 28, 14, 30, 0),
-            "stripe", "pbp_web",
-        )]
+        fetch_rows = [
+            (
+                101,
+                42,
+                7,
+                "Test Facility",
+                100.0,
+                datetime(2026, 4, 28, 14, 30, 0),
+                0.0,
+                0.0,
+                "card",
+                "reservation",
+                False,
+                False,
+                "USD",
+                "paid",
+                42,
+                datetime(2026, 4, 28, 14, 30, 0),
+                "stripe",
+                "pbp_web",
+            )
+        ]
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]
@@ -412,13 +438,28 @@ class TestGuardrailInDualMode:
         challenger = _mock_frame_v1_scorer()
 
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
-        fetch_rows = [(
-            101, 42, 7, "Test Facility",
-            100.0, datetime(2026, 4, 28, 14, 30, 0),
-            0.0, 0.0, "card", "reservation", False, False,
-            "USD", "paid", 42, datetime(2026, 4, 28, 14, 30, 0),
-            "stripe", "pbp_web",
-        )]
+        fetch_rows = [
+            (
+                101,
+                42,
+                7,
+                "Test Facility",
+                100.0,
+                datetime(2026, 4, 28, 14, 30, 0),
+                0.0,
+                0.0,
+                "card",
+                "reservation",
+                False,
+                False,
+                "USD",
+                "paid",
+                42,
+                datetime(2026, 4, 28, 14, 30, 0),
+                "stripe",
+                "pbp_web",
+            )
+        ]
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]
@@ -462,13 +503,28 @@ class TestActiveModeRetrocompat:
         champion = _mock_single_scorer()
 
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
-        fetch_rows = [(
-            101, 42, 7, "Test Facility",
-            100.0, datetime(2026, 4, 28, 14, 30, 0),
-            0.0, 0.0, "card", "reservation", False, False,
-            "USD", "paid", 42, datetime(2026, 4, 28, 14, 30, 0),
-            "stripe", "pbp_web",
-        )]
+        fetch_rows = [
+            (
+                101,
+                42,
+                7,
+                "Test Facility",
+                100.0,
+                datetime(2026, 4, 28, 14, 30, 0),
+                0.0,
+                0.0,
+                "card",
+                "reservation",
+                False,
+                False,
+                "USD",
+                "paid",
+                42,
+                datetime(2026, 4, 28, 14, 30, 0),
+                "stripe",
+                "pbp_web",
+            )
+        ]
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]
@@ -505,13 +561,28 @@ class TestActiveModeRetrocompat:
         champion = _mock_single_scorer()
 
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
-        fetch_rows = [(
-            101, 42, 7, "Test Facility",
-            100.0, datetime(2026, 4, 28, 14, 30, 0),
-            0.0, 0.0, "card", "reservation", False, False,
-            "USD", "paid", 42, datetime(2026, 4, 28, 14, 30, 0),
-            "stripe", "pbp_web",
-        )]
+        fetch_rows = [
+            (
+                101,
+                42,
+                7,
+                "Test Facility",
+                100.0,
+                datetime(2026, 4, 28, 14, 30, 0),
+                0.0,
+                0.0,
+                "card",
+                "reservation",
+                False,
+                False,
+                "USD",
+                "paid",
+                42,
+                datetime(2026, 4, 28, 14, 30, 0),
+                "stripe",
+                "pbp_web",
+            )
+        ]
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]
@@ -557,13 +628,28 @@ class TestActiveModeRetrocompat:
         champion = _mock_single_scorer()
 
         cursor_end = datetime(2026, 4, 28, 15, 0, 0)
-        fetch_rows = [(
-            101, 42, 7, "Test Facility",
-            100.0, datetime(2026, 4, 28, 14, 30, 0),
-            0.0, 0.0, "card", "reservation", False, False,
-            "USD", "paid", 42, datetime(2026, 4, 28, 14, 30, 0),
-            "stripe", "pbp_web",
-        )]
+        fetch_rows = [
+            (
+                101,
+                42,
+                7,
+                "Test Facility",
+                100.0,
+                datetime(2026, 4, 28, 14, 30, 0),
+                0.0,
+                0.0,
+                "card",
+                "reservation",
+                False,
+                False,
+                "USD",
+                "paid",
+                42,
+                datetime(2026, 4, 28, 14, 30, 0),
+                "stripe",
+                "pbp_web",
+            )
+        ]
         mock_read = _make_mock_ch_client()
         cursor_end_result = MagicMock()
         cursor_end_result.result_rows = [(cursor_end,)]

@@ -1,4 +1,5 @@
 """LaTeX table generator for thesis Cap 3. Booktabs format, APA 7 style."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,8 +50,10 @@ def table_model_comparison(results: Dict, path: Optional[Path] = None) -> str:
     models = ["isolation_forest", "lof", "ocsvm"]
     names = {"isolation_forest": "Isolation Forest", "lof": "LOF", "ocsvm": "OC-SVM"}
     metrics = [
-        ("AUC-ROC", "auc_roc"), ("AP", "average_precision"),
-        ("P@5\\%", "precision_at_5pct"), ("EF@5\\%", "ef_at_5pct"),
+        ("AUC-ROC", "auc_roc"),
+        ("AP", "average_precision"),
+        ("P@5\\%", "precision_at_5pct"),
+        ("EF@5\\%", "ef_at_5pct"),
     ]
     rows = []
     for label, key in metrics:
@@ -70,7 +73,9 @@ def table_model_comparison(results: Dict, path: Optional[Path] = None) -> str:
         "\\bottomrule\n"
         "\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Comparación de modelos en el conjunto de prueba", "tab:model-comparison")
+    tex = _wrap_table(
+        body, "Comparación de modelos en el conjunto de prueba", "tab:model-comparison"
+    )
     return _save(tex, path)
 
 
@@ -89,7 +94,8 @@ def table_he1_results(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lrrrrc}\n\\toprule\n"
         "Modelo & U & p-value & r & CLES & Pasa \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "HE1: Separación estadística de scores", "tab:he1-results")
     return _save(tex, path)
@@ -112,7 +118,8 @@ def table_he2_results(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lcccc}\n\\toprule\n"
         "Modelo & AUC-ROC & CI 95\\% & AP & Pasa \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "HE2: Capacidad discriminativa", "tab:he2-results")
     return _save(tex, path)
@@ -129,7 +136,8 @@ def table_he3_results(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lrrrr}\n\\toprule\n"
         "Modelo & EF@1\\% & EF@2\\% & EF@5\\% & EF@10\\% \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "HE3: Factor de enriquecimiento por percentil", "tab:he3-results")
     return _save(tex, path)
@@ -139,7 +147,12 @@ def table_he4_comparison(results: Dict, path: Optional[Path] = None) -> str:
     he4 = results.get("he4", {})
     mc = he4.get("metrics_comparison", {})
     wins = set(he4.get("if_wins_on", []))
-    metrics = [("AUC-ROC", "auc_roc"), ("AP", "ap"), ("P@5\\%", "precision_at_5pct"), ("EF@5\\%", "ef_at_5pct")]
+    metrics = [
+        ("AUC-ROC", "auc_roc"),
+        ("AP", "ap"),
+        ("P@5\\%", "precision_at_5pct"),
+        ("EF@5\\%", "ef_at_5pct"),
+    ]
     rows = []
     for label, key in metrics:
         vals = []
@@ -152,9 +165,12 @@ def table_he4_comparison(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lrrr}\n\\toprule\n"
         "Métrica & IF & LOF & OC-SVM \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, f"HE4: IF gana {he4.get('if_wins', 0)}/4 métricas", "tab:he4-comparison")
+    tex = _wrap_table(
+        body, f"HE4: IF gana {he4.get('if_wins', 0)}/4 métricas", "tab:he4-comparison"
+    )
     return _save(tex, path)
 
 
@@ -172,9 +188,12 @@ def table_bootstrap_ci(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lcccc}\n\\toprule\n"
         "Modelo & AUC media & CI 95\\% AUC & AP media & CI 95\\% AP \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Intervalos de confianza bootstrap (1000 iteraciones)", "tab:bootstrap-ci")
+    tex = _wrap_table(
+        body, "Intervalos de confianza bootstrap (1000 iteraciones)", "tab:bootstrap-ci"
+    )
     return _save(tex, path)
 
 
@@ -183,16 +202,25 @@ def table_sensitivity_proxy(sens: Dict, path: Optional[Path] = None) -> str:
     rows = []
     for proxy in ["unified", "tipo_a", "wide"]:
         d = ps.get(proxy, {})
-        rows.append(f"  {_esc(proxy)} & {_fmt(d.get('auc_roc'))} & {_fmt(d.get('ap'))} & {_fmt(d.get('base_rate'), 4)} \\\\")
+        rows.append(
+            f"  {_esc(proxy)} & {_fmt(d.get('auc_roc'))} & {_fmt(d.get('ap'))} & {_fmt(d.get('base_rate'), 4)} \\\\"
+        )
     rows.append("\\midrule")
-    rows.append(f"  $\\Delta$ AUC (tipo\\_a) & \\multicolumn{{3}}{{c}}{{{_fmt(ps.get('delta_auc_tipo_a'))}}} \\\\")
-    rows.append(f"  Robusto ($\\Delta < 0.05$) & \\multicolumn{{3}}{{c}}{{{_fmt(ps.get('robust'))}}} \\\\")
+    rows.append(
+        f"  $\\Delta$ AUC (tipo\\_a) & \\multicolumn{{3}}{{c}}{{{_fmt(ps.get('delta_auc_tipo_a'))}}} \\\\"
+    )
+    rows.append(
+        f"  Robusto ($\\Delta < 0.05$) & \\multicolumn{{3}}{{c}}{{{_fmt(ps.get('robust'))}}} \\\\"
+    )
     body = (
         "\\begin{tabular}{lrrr}\n\\toprule\n"
         "Proxy & AUC-ROC & AP & Tasa base \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Sensibilidad del proxy: unificado vs. Tipo A vs. amplio", "tab:sensitivity-proxy")
+    tex = _wrap_table(
+        body, "Sensibilidad del proxy: unificado vs. Tipo A vs. amplio", "tab:sensitivity-proxy"
+    )
     return _save(tex, path)
 
 
@@ -204,11 +232,14 @@ def table_sensitivity_per_type(sens: Dict, path: Optional[Path] = None) -> str:
         auc = _fmt(d.get("auc_roc")) if d.get("auc_roc") is not None else "---"
         ap = _fmt(d.get("ap")) if d.get("ap") is not None else "---"
         ef = _fmt(d.get("ef_at_5pct")) if d.get("ef_at_5pct") is not None else "---"
-        rows.append(f"  {_esc(tipo)} & {d.get('count', 0):,} & {_fmt(d.get('rate'), 4)} & {auc} & {ap} & {ef} \\\\")
+        rows.append(
+            f"  {_esc(tipo)} & {d.get('count', 0):,} & {_fmt(d.get('rate'), 4)} & {auc} & {ap} & {ef} \\\\"
+        )
     body = (
         "\\begin{tabular}{lrrrrr}\n\\toprule\n"
         "Tipo & N & Tasa & AUC & AP & EF@5\\% \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Métricas desagregadas por tipo de proxy", "tab:sensitivity-per-type")
     return _save(tex, path)
@@ -226,10 +257,11 @@ def table_sensitivity_feature18(sens: Dict, path: Optional[Path] = None) -> str:
     ]
     body = (
         "\\begin{tabular}{lr}\n\\toprule\n"
-        "Métrica & Valor \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        "Métrica & Valor \\\\\n\\midrule\n" + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Sensibilidad de Feature \\#18 (user\\_reversal\\_ratio\\_30d)", "tab:sensitivity-f18")
+    tex = _wrap_table(
+        body, "Sensibilidad de Feature \\#18 (user\\_reversal\\_ratio\\_30d)", "tab:sensitivity-f18"
+    )
     return _save(tex, path)
 
 
@@ -238,14 +270,22 @@ def table_ablation_31vs21(sens: Dict, path: Optional[Path] = None) -> str:
     m31 = abl.get("model_31", {})
     m21 = abl.get("model_21", {})
     delta = abl.get("delta", {})
-    metrics = [("AUC-ROC", "auc_roc"), ("AP", "ap"), ("P@5\\%", "precision_at_5pct"), ("EF@5\\%", "enrichment_factor")]
+    metrics = [
+        ("AUC-ROC", "auc_roc"),
+        ("AP", "ap"),
+        ("P@5\\%", "precision_at_5pct"),
+        ("EF@5\\%", "enrichment_factor"),
+    ]
     rows = []
     for label, key in metrics:
-        rows.append(f"  {label} & {_fmt(m31.get(key))} & {_fmt(m21.get(key))} & {_fmt(delta.get(key))} \\\\")
+        rows.append(
+            f"  {label} & {_fmt(m31.get(key))} & {_fmt(m21.get(key))} & {_fmt(delta.get(key))} \\\\"
+        )
     body = (
         "\\begin{tabular}{lrrr}\n\\toprule\n"
         "Métrica & IF-31 & IF-21 & $\\Delta$ \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Ablación: IF-31 vs. IF-21 (grupos F, G, H)", "tab:ablation-31vs21")
     return _save(tex, path)
@@ -256,14 +296,20 @@ def table_temporal_stability(results: Dict, path: Optional[Path] = None) -> str:
     for m in ["isolation_forest", "lof", "ocsvm"]:
         names = {"isolation_forest": "IF", "lof": "LOF", "ocsvm": "OC-SVM"}
         ts = results.get(m, {}).get("temporal_stability", {}).get("monthly_auc", {})
-        vals = [_fmt(ts.get(month, {}).get("auc_roc")) for month in ["2025-09", "2025-10", "2025-11", "2025-12"]]
+        vals = [
+            _fmt(ts.get(month, {}).get("auc_roc"))
+            for month in ["2025-09", "2025-10", "2025-11", "2025-12"]
+        ]
         rows.append(f"  {names[m]} & " + " & ".join(vals) + " \\\\")
     body = (
         "\\begin{tabular}{lrrrr}\n\\toprule\n"
         "Modelo & Sep & Oct & Nov & Dic \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Estabilidad temporal: AUC-ROC mensual (test set)", "tab:temporal-stability")
+    tex = _wrap_table(
+        body, "Estabilidad temporal: AUC-ROC mensual (test set)", "tab:temporal-stability"
+    )
     return _save(tex, path)
 
 
@@ -273,10 +319,30 @@ def table_hypothesis_summary(results: Dict, path: Optional[Path] = None) -> str:
     he3 = results.get("isolation_forest", {}).get("he3", {})
     he4 = results.get("he4", {})
     hypotheses = [
-        ("HE1", "Separación estadística", f"r = {_fmt(he1.get('rank_biserial_r'))}", he1.get("he1_pass")),
-        ("HE2", "Capacidad discriminativa", f"AUC = {_fmt(he2.get('auc_roc'))}", he2.get("he2_pass")),
-        ("HE3", "Concentración top-K", f"EF@5\\% = {_fmt(he3.get('ef_at_5pct'))}", he3.get("he3_pass")),
-        ("HE4", "IF $\\geq$ competidores", f"{he4.get('if_wins', 0)}/4 métricas", he4.get("he4_pass")),
+        (
+            "HE1",
+            "Separación estadística",
+            f"r = {_fmt(he1.get('rank_biserial_r'))}",
+            he1.get("he1_pass"),
+        ),
+        (
+            "HE2",
+            "Capacidad discriminativa",
+            f"AUC = {_fmt(he2.get('auc_roc'))}",
+            he2.get("he2_pass"),
+        ),
+        (
+            "HE3",
+            "Concentración top-K",
+            f"EF@5\\% = {_fmt(he3.get('ef_at_5pct'))}",
+            he3.get("he3_pass"),
+        ),
+        (
+            "HE4",
+            "IF $\\geq$ competidores",
+            f"{he4.get('if_wins', 0)}/4 métricas",
+            he4.get("he4_pass"),
+        ),
     ]
     rows = []
     for name, desc, evidence, passed in hypotheses:
@@ -286,15 +352,23 @@ def table_hypothesis_summary(results: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{llll}\n\\toprule\n"
         "Hipótesis & Descripción & Evidencia & Veredicto \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Resumen de validación de hipótesis", "tab:hypothesis-summary")
     return _save(tex, path)
 
 
-def table_metrics_by_segment(sens: Dict, segment_key: str, caption: str, label: str, path: Optional[Path] = None) -> str:
+def table_metrics_by_segment(
+    sens: Dict, segment_key: str, caption: str, label: str, path: Optional[Path] = None
+) -> str:
     segs = sens.get("segment_metrics", {}).get(segment_key, {})
-    metrics = [("AUC", "auc_roc"), ("AP", "ap"), ("P@5\\%", "precision_at_5pct"), ("EF@5\\%", "enrichment_factor")]
+    metrics = [
+        ("AUC", "auc_roc"),
+        ("AP", "ap"),
+        ("P@5\\%", "precision_at_5pct"),
+        ("EF@5\\%", "enrichment_factor"),
+    ]
     rows = []
     for seg_name, d in sorted(segs.items()):
         vals = [_fmt(d.get(k)) for _, k in metrics]
@@ -302,8 +376,11 @@ def table_metrics_by_segment(sens: Dict, segment_key: str, caption: str, label: 
         rows.append(f"  {_esc(seg_name)} & {n} & " + " & ".join(vals) + " \\\\")
     body = (
         "\\begin{tabular}{lrrrrr}\n\\toprule\n"
-        "Segmento & N & " + " & ".join(l for l, _ in metrics) + " \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        "Segmento & N & "
+        + " & ".join(l for l, _ in metrics)
+        + " \\\\\n\\midrule\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, caption, label)
     return _save(tex, path)
@@ -312,13 +389,22 @@ def table_metrics_by_segment(sens: Dict, segment_key: str, caption: str, label: 
 def table_anomaly_types(sens: Dict, path: Optional[Path] = None) -> str:
     typo = sens.get("anomaly_typology", {}).get("type_distribution", {})
     rows = []
-    for t in ["amount", "velocity", "discount", "temporal", "credit_flow", "role_deviation", "diversity", "reversal", "mixed"]:
+    for t in [
+        "amount",
+        "velocity",
+        "discount",
+        "temporal",
+        "credit_flow",
+        "role_deviation",
+        "diversity",
+        "reversal",
+        "mixed",
+    ]:
         d = typo.get(t, {})
         rows.append(f"  {_esc(t)} & {d.get('count', 0):,} & {_fmt(d.get('pct'), 2)}\\% \\\\")
     body = (
         "\\begin{tabular}{lrr}\n\\toprule\n"
-        "Tipo & N & \\% \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        "Tipo & N & \\% \\\\\n\\midrule\n" + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Tipología de anomalías (top-5\\%, SHAP)", "tab:anomaly-types")
     return _save(tex, path)
@@ -333,12 +419,13 @@ def table_user_risk_profile(sens: Dict, path: Optional[Path] = None) -> str:
     ]
     summary = up.get("flagged_users_summary", {})
     if summary:
-        rows.append(f"  Concentración media (flagged) & {_fmt(summary.get('mean_concentration'))} \\\\")
+        rows.append(
+            f"  Concentración media (flagged) & {_fmt(summary.get('mean_concentration'))} \\\\"
+        )
         rows.append(f"  Concentración máxima & {_fmt(summary.get('max_concentration'))} \\\\")
     body = (
         "\\begin{tabular}{lr}\n\\toprule\n"
-        "Métrica & Valor \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        "Métrica & Valor \\\\\n\\midrule\n" + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Perfil de riesgo agregado por usuario", "tab:user-risk-profile")
     return _save(tex, path)
@@ -356,9 +443,12 @@ def table_posthoc_facility(posthoc: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lrrr}\n\\toprule\n"
         "Facility & N & Tasa anom. & Enriquecimiento \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Top 10 centros con mayor concentración de anomalías", "tab:posthoc-facility")
+    tex = _wrap_table(
+        body, "Top 10 centros con mayor concentración de anomalías", "tab:posthoc-facility"
+    )
     return _save(tex, path)
 
 
@@ -374,7 +464,8 @@ def table_posthoc_currency(posthoc: Dict, path: Optional[Path] = None) -> str:
     body = (
         "\\begin{tabular}{lrrr}\n\\toprule\n"
         "Moneda & N & Tasa anom. & Enriquecimiento \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        + "\n".join(rows)
+        + "\n\\bottomrule\n\\end{tabular}\n"
     )
     tex = _wrap_table(body, "Distribución de anomalías por moneda", "tab:posthoc-currency")
     return _save(tex, path)
@@ -391,8 +482,11 @@ def table_posthoc_manager(posthoc: Dict, path: Optional[Path] = None) -> str:
     ]
     body = (
         "\\begin{tabular}{lr}\n\\toprule\n"
-        "Métrica & Valor \\\\\n\\midrule\n"
-        + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
+        "Métrica & Valor \\\\\n\\midrule\n" + "\n".join(rows) + "\n\\bottomrule\n\\end{tabular}\n"
     )
-    tex = _wrap_table(body, "Concentración de anomalías en pagos con intervención de manager", "tab:posthoc-manager")
+    tex = _wrap_table(
+        body,
+        "Concentración de anomalías en pagos con intervención de manager",
+        "tab:posthoc-manager",
+    )
     return _save(tex, path)

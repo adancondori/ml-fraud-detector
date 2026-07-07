@@ -3,6 +3,7 @@
 Validates: score convention, grid search checkpoint/resume,
 multi-seed, OC-SVM subsample, save/load roundtrip, LOF novelty.
 """
+
 from __future__ import annotations
 
 import json
@@ -94,9 +95,14 @@ def test_grid_search_checkpoint_resumes(synthetic_data):
         checkpoint = str(Path(tmpdir) / "gs_checkpoint.csv")
         # Run first 1 combo (simulate partial)
         results1 = ModelTrainer.grid_search_if(
-            X_train, X_val, y_val, param_grid,
-            checkpoint_path=checkpoint, checkpoint_every=1,
-            random_state=42, max_combos=1,
+            X_train,
+            X_val,
+            y_val,
+            param_grid,
+            checkpoint_path=checkpoint,
+            checkpoint_every=1,
+            random_state=42,
+            max_combos=1,
         )
         assert Path(checkpoint).exists()
         df1 = pd.read_csv(checkpoint)
@@ -104,8 +110,12 @@ def test_grid_search_checkpoint_resumes(synthetic_data):
 
         # Resume — should complete remaining
         results2 = ModelTrainer.grid_search_if(
-            X_train, X_val, y_val, param_grid,
-            checkpoint_path=checkpoint, checkpoint_every=1,
+            X_train,
+            X_val,
+            y_val,
+            param_grid,
+            checkpoint_path=checkpoint,
+            checkpoint_every=1,
             random_state=42,
         )
         df2 = pd.read_csv(checkpoint)

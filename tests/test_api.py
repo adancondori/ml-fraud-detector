@@ -87,7 +87,13 @@ def mock_lifespan():
     scorer_state["last_batch_at"] = None
     scorer_state["anomaly_scores_table"] = "pbp_productionDB_optimized.anomaly_scores"
     scorer_state["read_fingerprint"] = ("prod-host", 8443, "pbp_productionDB_optimized", True, "ro")
-    scorer_state["write_fingerprint"] = ("clickhouse", 8123, "pbp_productionDB_optimized", False, "default")
+    scorer_state["write_fingerprint"] = (
+        "clickhouse",
+        8123,
+        "pbp_productionDB_optimized",
+        False,
+        "default",
+    )
     scorer_state["write_host"] = "clickhouse"
     scorer_state["allow_nonlocal_write"] = False
     # Reset command side effects between tests

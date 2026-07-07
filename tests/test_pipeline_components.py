@@ -1,4 +1,5 @@
 """Tests for preprocessing, models, metrics and currency normalization."""
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -138,5 +139,7 @@ class TestMetrics:
     def test_bootstrap_ci_bounds(self):
         labels = np.array([0, 0, 1, 1, 0, 1], dtype=np.int8)
         scores = np.array([0.1, 0.2, 0.8, 0.9, 0.3, 0.7])
-        ci = bootstrap_ci(labels, scores, metric_fn=lambda y, s: precision_at_k(y, s, 0.5), n_iterations=100)
+        ci = bootstrap_ci(
+            labels, scores, metric_fn=lambda y, s: precision_at_k(y, s, 0.5), n_iterations=100
+        )
         assert ci["lower"] <= ci["mean"] <= ci["upper"]

@@ -1,4 +1,5 @@
 """Tests for the thesis-aligned DataManager."""
+
 import json
 
 import numpy as np
@@ -10,7 +11,12 @@ import pytest
 def sample_df():
     n = 120
     rng = np.random.RandomState(42)
-    statuses = ["captured"] * 96 + ["totally_refunded"] * 12 + ["refunded_to_credit"] * 8 + ["partially_refunded"] * 4
+    statuses = (
+        ["captured"] * 96
+        + ["totally_refunded"] * 12
+        + ["refunded_to_credit"] * 8
+        + ["partially_refunded"] * 4
+    )
     return pd.DataFrame(
         {
             "id": range(1, n + 1),
@@ -204,12 +210,25 @@ class TestAmountSanityGuard:
         """Small DataFrame with two currencies and one extreme outlier each."""
         return pd.DataFrame(
             {
-                "amount": [10.0, 50.0, 100.0, 200.0, 500.0, 1_000.0, 5_000.0,  # USD normal
-                           100_000_000.0,                                          # USD corrupt
-                           5.0, 10.0, 20.0, 40.0, 80.0, 160.0, 320.0,           # CAD normal
-                           50_000_000.0],                                          # CAD corrupt
-                "currency": (["USD"] * 7 + ["USD"]
-                             + ["CAD"] * 7 + ["CAD"]),
+                "amount": [
+                    10.0,
+                    50.0,
+                    100.0,
+                    200.0,
+                    500.0,
+                    1_000.0,
+                    5_000.0,  # USD normal
+                    100_000_000.0,  # USD corrupt
+                    5.0,
+                    10.0,
+                    20.0,
+                    40.0,
+                    80.0,
+                    160.0,
+                    320.0,  # CAD normal
+                    50_000_000.0,
+                ],  # CAD corrupt
+                "currency": (["USD"] * 7 + ["USD"] + ["CAD"] * 7 + ["CAD"]),
             }
         )
 
@@ -252,14 +271,10 @@ class TestAmountSanityGuard:
         from fraud_detector.data.loader import DataManager
 
         original_len = len(amount_df)
-        result = DataManager.sanitize_amount_df(
-            amount_df, thresholds=None, split_name="train"
-        )
+        result = DataManager.sanitize_amount_df(amount_df, thresholds=None, split_name="train")
         assert len(result) == original_len
 
-        result_empty = DataManager.sanitize_amount_df(
-            amount_df, thresholds={}, split_name="train"
-        )
+        result_empty = DataManager.sanitize_amount_df(amount_df, thresholds={}, split_name="train")
         assert len(result_empty) == original_len
 
     def test_sanitize_normal_data_untouched(self):

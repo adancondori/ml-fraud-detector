@@ -1,4 +1,5 @@
 """Tests for the 31-feature anomaly-engineering contract."""
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -54,19 +55,80 @@ def _make_txn(
 def sample_data():
     rows = [
         _make_txn(1, 1, "2025-01-01 08:00:00", amount=100, payment_method="card"),
-        _make_txn(2, 1, "2025-01-01 08:30:00", amount=20, category="debit", payment_method="wallet", club_credit_flag=True),
-        _make_txn(3, 1, "2025-01-02 09:00:00", amount=50, category="prepaid", payment_method="club_credit", club_credit_flag=True),
+        _make_txn(
+            2,
+            1,
+            "2025-01-01 08:30:00",
+            amount=20,
+            category="debit",
+            payment_method="wallet",
+            club_credit_flag=True,
+        ),
+        _make_txn(
+            3,
+            1,
+            "2025-01-02 09:00:00",
+            amount=50,
+            category="prepaid",
+            payment_method="club_credit",
+            club_credit_flag=True,
+        ),
         _make_txn(4, 1, "2025-01-10 10:00:00", amount=70, category="merchandise", discount=5),
         _make_txn(5, 2, "2025-01-03 11:00:00", amount=90),
         _make_txn(6, 2, "2025-01-04 12:00:00", amount=200, status="totally_refunded"),
         _make_txn(7, 2, "2025-01-04 13:00:00", amount=110, category="merchandise"),
-        _make_txn(8, 2, "2025-01-20 14:00:00", amount=25, category="debit", payment_method="wallet", club_credit_flag=True),
-        _make_txn(9, 3, "2025-01-05 09:00:00", amount=60, tip=10, category="lesson", user_role="teacher", is_staff=1, paid_by_manager=True, user_created_at="2024-01-01 00:00:00"),
-        _make_txn(10, 3, "2025-01-06 10:00:00", amount=55, status="refunded_to_credit", user_role="teacher", is_staff=1, user_created_at="2024-01-01 00:00:00"),
-        _make_txn(11, 3, "2025-01-07 11:00:00", amount=45, category="prepaid", payment_method="wallet", user_role="teacher", is_staff=1, user_created_at="2024-01-01 00:00:00"),
+        _make_txn(
+            8,
+            2,
+            "2025-01-20 14:00:00",
+            amount=25,
+            category="debit",
+            payment_method="wallet",
+            club_credit_flag=True,
+        ),
+        _make_txn(
+            9,
+            3,
+            "2025-01-05 09:00:00",
+            amount=60,
+            tip=10,
+            category="lesson",
+            user_role="teacher",
+            is_staff=1,
+            paid_by_manager=True,
+            user_created_at="2024-01-01 00:00:00",
+        ),
+        _make_txn(
+            10,
+            3,
+            "2025-01-06 10:00:00",
+            amount=55,
+            status="refunded_to_credit",
+            user_role="teacher",
+            is_staff=1,
+            user_created_at="2024-01-01 00:00:00",
+        ),
+        _make_txn(
+            11,
+            3,
+            "2025-01-07 11:00:00",
+            amount=45,
+            category="prepaid",
+            payment_method="wallet",
+            user_role="teacher",
+            is_staff=1,
+            user_created_at="2024-01-01 00:00:00",
+        ),
         _make_txn(12, 5, "2025-01-08 08:00:00", amount=0, category="reservation"),
         _make_txn(13, 1, "2025-07-03 09:00:00", amount=120, payment_method="wallet"),
-        _make_txn(14, 4, "2025-07-03 10:00:00", amount=80, payment_method="card", user_created_at="2025-07-03 10:00:00"),
+        _make_txn(
+            14,
+            4,
+            "2025-07-03 10:00:00",
+            amount=80,
+            payment_method="card",
+            user_created_at="2025-07-03 10:00:00",
+        ),
     ]
     df = pd.DataFrame(rows)
     return df.sort_values(["user_id", "created_at", "id"]).reset_index(drop=True)

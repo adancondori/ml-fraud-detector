@@ -126,7 +126,11 @@ def test_scoring_result_accepts_frame_v1_fields():
         percentile=0.9,
         calibration_segment="facility:123",
         fallback_level="facility",
-        frame_flags={"timezone_missing": False, "currency_missing": False, "currency_unknown": False},
+        frame_flags={
+            "timezone_missing": False,
+            "currency_missing": False,
+            "currency_unknown": False,
+        },
     )
     assert result.calibration_segment == "facility:123"
     assert result.fallback_level == "facility"
@@ -197,9 +201,7 @@ class TestDispatch:
         # calibration_segment must be a valid string
         assert isinstance(result.calibration_segment, str)
         assert result.calibration_segment in (
-            [f"facility:{10}"]
-            + [f"currency:USD"]
-            + ["global"]
+            [f"facility:{10}"] + [f"currency:USD"] + ["global"]
         ) or result.calibration_segment.startswith(("facility:", "currency:", "global"))
 
         # fallback_level must be one of the three levels

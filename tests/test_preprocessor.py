@@ -1,4 +1,5 @@
 """Tests for UnsupervisedPreprocessor — Fase 5 contracts."""
+
 from __future__ import annotations
 
 import tempfile
@@ -54,9 +55,7 @@ def test_output_is_float32(sample_df: pd.DataFrame):
 
 
 def test_nan_input_raises_valueerror(fitted_preprocessor: UnsupervisedPreprocessor):
-    bad_df = pd.DataFrame(
-        {name: [np.nan] * 5 for name in FEATURE_NAMES}
-    )
+    bad_df = pd.DataFrame({name: [np.nan] * 5 for name in FEATURE_NAMES})
     with pytest.raises(ValueError, match="NaN|infinite"):
         fitted_preprocessor.transform(bad_df)
 
@@ -125,8 +124,7 @@ def test_scaler_fitted_on_train_only(sample_df: pd.DataFrame):
     train_df = sample_df.copy()
     # Create a different distribution for "other" data
     other_data = {
-        name: (rng.standard_normal(50) * 100 + 500).astype(np.float32)
-        for name in FEATURE_NAMES
+        name: (rng.standard_normal(50) * 100 + 500).astype(np.float32) for name in FEATURE_NAMES
     }
     other_df = pd.DataFrame(other_data)
 

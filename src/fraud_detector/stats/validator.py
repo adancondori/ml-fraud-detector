@@ -12,6 +12,7 @@ Checks that:
 Raises AssertionError with a descriptive message on any violation.
 Returns True if all checks pass (convenient for scripting and testing).
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -80,15 +81,13 @@ def validate_universe_filter(
 
     # 5. n_facilities field must match facility coverage
     artifact_n_facilities = stats.get("n_facilities", -1)
-    assert artifact_n_facilities == expected_n, (
-        f"n_facilities={artifact_n_facilities} != expected {expected_n}"
-    )
+    assert (
+        artifact_n_facilities == expected_n
+    ), f"n_facilities={artifact_n_facilities} != expected {expected_n}"
 
     # 6. Every facility entry must have a non-empty iana_tz
     missing_tz = [
-        fid
-        for fid, entry in stats.get("facilities", {}).items()
-        if not entry.get("iana_tz")
+        fid for fid, entry in stats.get("facilities", {}).items() if not entry.get("iana_tz")
     ]
     assert not missing_tz, (
         f"{len(missing_tz)} facilities have empty/missing iana_tz: "

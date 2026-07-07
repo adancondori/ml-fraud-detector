@@ -7,6 +7,7 @@ This module is intentionally thesis-aligned:
 - currency normalization happens before feature engineering,
 - the canonical SQL includes the joins required for the 31-feature catalog.
 """
+
 from __future__ import annotations
 
 import json
@@ -291,7 +292,9 @@ class DataManager:
         out["club_credit_flag"] = out.get("club_credit_flag", False).fillna(False)
         out["paid_by_manager"] = out.get("paid_by_manager", False).fillna(False)
         out["is_staff"] = out.get("is_staff", 0).fillna(0).astype(np.int8)
-        out["user_role"] = out.get("user_role", "player").fillna("player").astype(str).replace("", "player")
+        out["user_role"] = (
+            out.get("user_role", "player").fillna("player").astype(str).replace("", "player")
+        )
 
         if "currency" in out.columns:
             out["currency"] = DataManager._sanitize_currency(out["currency"])
@@ -323,9 +326,7 @@ class DataManager:
                     f"Split '{split_name}': {duplicate_count} duplicate IDs "
                     f"({duplicate_pct:.4f}%)"
                 )
-            logger.warning(
-                f"Split '{split_name}': {duplicate_count} duplicate IDs; deduplicating"
-            )
+            logger.warning(f"Split '{split_name}': {duplicate_count} duplicate IDs; deduplicating")
             df.drop_duplicates(subset=["id"], keep="last", inplace=True)
 
         if (df["user_id"] <= 0).any():
@@ -371,6 +372,7 @@ class DataManager:
         """
         if settings is None:
             from config.config import settings as _default_settings
+
             settings = _default_settings
 
         if proxy_type in ("strict", "tipo_a"):
@@ -400,9 +402,7 @@ class DataManager:
             # Descuento anomalo: user_discount_ratio_30d > threshold.
             col = "user_discount_ratio_30d"
             if col not in df.columns:
-                logger.warning(
-                    f"Tipo C: column '{col}' not found; returning all zeros."
-                )
+                logger.warning(f"Tipo C: column '{col}' not found; returning all zeros.")
                 return pd.Series(np.int8(0), index=df.index)
             return (df[col] > settings.tipo_c_discount_ratio_threshold).astype(np.int8)
 
@@ -411,9 +411,7 @@ class DataManager:
             # Uses user_txn_count_24h (shifted -1 for anti-leakage) + 1 to recover actual.
             col = "user_txn_count_24h"
             if col not in df.columns:
-                logger.warning(
-                    f"Tipo D: column '{col}' not found; returning all zeros."
-                )
+                logger.warning(f"Tipo D: column '{col}' not found; returning all zeros.")
                 return pd.Series(np.int8(0), index=df.index)
             # Feature stores count-1 (anti-leakage shift), so actual = value + 1
             return ((df[col] + 1) > settings.tipo_d_txn_count_1d_threshold).astype(np.int8)

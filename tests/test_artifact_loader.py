@@ -103,9 +103,9 @@ class TestArtifactsFrameV1:
     def test_frame_v1_loads_thresholds_segmented(self, tmp_path):
         frame_dir = _make_frame_v1_dir(tmp_path)
         artifacts = load_artifacts(frame_dir)
-        assert artifacts.thresholds_segmented is not None, (
-            "thresholds_segmented should be loaded for frame-v1"
-        )
+        assert (
+            artifacts.thresholds_segmented is not None
+        ), "thresholds_segmented should be loaded for frame-v1"
 
     def test_frame_v1_thresholds_segmented_has_by_facility(self, tmp_path):
         frame_dir = _make_frame_v1_dir(tmp_path)
@@ -173,7 +173,10 @@ class TestMetadataFilenameOverride:
         """Passing metadata_filename='model_metadata.json' explicitly behaves identically."""
         artifacts_default = load_artifacts(MODEL_DIR)
         artifacts_explicit = load_artifacts(MODEL_DIR, metadata_filename="model_metadata.json")
-        assert artifacts_default.metadata["model_version"] == artifacts_explicit.metadata["model_version"]
+        assert (
+            artifacts_default.metadata["model_version"]
+            == artifacts_explicit.metadata["model_version"]
+        )
         assert len(artifacts_default.feature_list) == len(artifacts_explicit.feature_list)
 
     def test_frame_v1_filename_loads_frame_v1(self):
@@ -182,9 +185,9 @@ class TestMetadataFilenameOverride:
         assert artifacts.metadata["model_version"] == "frame-v1"
         assert len(artifacts.feature_list) == 30
         assert artifacts.facility_stats is not None, "facility_stats must be loaded for frame-v1"
-        assert artifacts.thresholds_segmented is not None, (
-            "thresholds_segmented must be loaded for frame-v1"
-        )
+        assert (
+            artifacts.thresholds_segmented is not None
+        ), "thresholds_segmented must be loaded for frame-v1"
 
     def test_missing_explicit_filename_raises(self, tmp_path):
         """An explicit metadata_filename that does not exist raises FileNotFoundError."""

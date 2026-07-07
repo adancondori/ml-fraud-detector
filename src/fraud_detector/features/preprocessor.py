@@ -1,4 +1,5 @@
 """Preprocessing for the unsupervised anomaly-detection pipeline."""
+
 from __future__ import annotations
 
 from typing import List, Literal, Optional
@@ -46,9 +47,7 @@ class UnsupervisedPreprocessor:
         X = self._extract_matrix(df)
         self.scaler.fit(X)
         self._fitted = True
-        logger.info(
-            f"Preprocessor fitted on {X.shape[0]:,} rows and {X.shape[1]} features"
-        )
+        logger.info(f"Preprocessor fitted on {X.shape[0]:,} rows and {X.shape[1]} features")
         return self
 
     def transform(self, df: pd.DataFrame) -> np.ndarray:

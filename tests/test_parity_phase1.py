@@ -8,6 +8,7 @@ Cubre también:
   vía el artefacto por facility_id sin necesitar columna time_zone en el row.
 - test_magnitude_relative_to_facility: para amount > fmean, log_amount_fac > 0.
 """
+
 from __future__ import annotations
 
 import json
@@ -58,9 +59,8 @@ def golden_rows() -> pd.DataFrame:
     """Set dorado estratificado por facility_id: >=20 facilities, >=100 filas."""
     df = pd.read_parquet(GOLDEN_PARQUET)
     rows_per_fac = max(1, N_ROWS // MIN_FACILITIES)
-    sampled = (
-        df.groupby("facility_id", group_keys=False)
-        .apply(lambda g: g.head(rows_per_fac), include_groups=False)
+    sampled = df.groupby("facility_id", group_keys=False).apply(
+        lambda g: g.head(rows_per_fac), include_groups=False
     )
     if "facility_id" not in sampled.columns:
         sampled = sampled.join(df[["facility_id"]])
@@ -71,9 +71,7 @@ def golden_rows() -> pd.DataFrame:
         f"Set estratificado cubre solo {sampled['facility_id'].nunique()} facilities "
         f"(mínimo: {MIN_FACILITIES})"
     )
-    assert len(sampled) >= N_ROWS, (
-        f"Set tiene solo {len(sampled)} filas (mínimo: {N_ROWS})"
-    )
+    assert len(sampled) >= N_ROWS, f"Set tiene solo {len(sampled)} filas (mínimo: {N_ROWS})"
     return sampled
 
 
@@ -97,7 +95,7 @@ def _row_to_payment(row) -> dict:
         "reservation_paid_out": amount,
         "created_at": row["created_at"],
         "facility_id": int(row["facility_id"]),
-        "currency": "USD",           # amount ya en USD, sin doble conversión
+        "currency": "USD",  # amount ya en USD, sin doble conversión
         "original_currency": original_currency,  # para staff z-score lookup
         "discount": discount_reconstituted,
         "tip": 1.0 if float(row.get("has_tip", 0) or 0) > 0 else 0.0,
@@ -135,22 +133,30 @@ class TestFrameV1FeatureNames:
     """Verificar el contrato del feature set FS-frame-v1."""
 
     def test_feature_names_count(self):
-        assert len(FRAME_V1_FEATURE_NAMES) == 30, (
-            f"FRAME_V1_FEATURE_NAMES tiene {len(FRAME_V1_FEATURE_NAMES)} features, esperado 30"
-        )
+        assert (
+            len(FRAME_V1_FEATURE_NAMES) == 30
+        ), f"FRAME_V1_FEATURE_NAMES tiene {len(FRAME_V1_FEATURE_NAMES)} features, esperado 30"
 
     def test_feature_names_unique(self):
-        assert len(FRAME_V1_FEATURE_NAMES) == len(set(FRAME_V1_FEATURE_NAMES)), (
-            "FRAME_V1_FEATURE_NAMES contiene duplicados"
-        )
+        assert len(FRAME_V1_FEATURE_NAMES) == len(
+            set(FRAME_V1_FEATURE_NAMES)
+        ), "FRAME_V1_FEATURE_NAMES contiene duplicados"
 
     def test_canonical_features_present(self):
         """Las features canónicas del FS-frame-v1 deben estar presentes."""
         required = [
-            "log_amount_fac", "hour_sin_loc", "hour_cos_loc",
-            "dow_sin_loc", "dow_cos_loc", "is_weekend_loc", "is_off_hours_loc",
-            "amount_facility_ratio", "user_amount_24h_fac", "user_debit_amount_30d_fac",
-            "off_hours_high_value_loc", "staff_amount_zscore",
+            "log_amount_fac",
+            "hour_sin_loc",
+            "hour_cos_loc",
+            "dow_sin_loc",
+            "dow_cos_loc",
+            "is_weekend_loc",
+            "is_off_hours_loc",
+            "amount_facility_ratio",
+            "user_amount_24h_fac",
+            "user_debit_amount_30d_fac",
+            "off_hours_high_value_loc",
+            "staff_amount_zscore",
         ]
         for feat in required:
             assert feat in FRAME_V1_FEATURE_NAMES, f"Feature canónica faltante: {feat}"
@@ -158,15 +164,24 @@ class TestFrameV1FeatureNames:
     def test_eliminated_features_absent(self):
         """Features eliminadas del FS-frame-v1 no deben estar presentes."""
         eliminated = [
-            "facility_avg_amount", "amount_usd_ratio", "log_amount",
-            "hour_sin", "hour_cos", "day_of_week", "is_weekend", "is_off_hours",
-            "user_txn_count_1h", "same_amount_count_1h", "same_amount_count_24h",
-            "is_third_party_payment", "user_account_age_days",
+            "facility_avg_amount",
+            "amount_usd_ratio",
+            "log_amount",
+            "hour_sin",
+            "hour_cos",
+            "day_of_week",
+            "is_weekend",
+            "is_off_hours",
+            "user_txn_count_1h",
+            "same_amount_count_1h",
+            "same_amount_count_24h",
+            "is_third_party_payment",
+            "user_account_age_days",
         ]
         for feat in eliminated:
-            assert feat not in FRAME_V1_FEATURE_NAMES, (
-                f"Feature eliminada no debe estar en FRAME_V1_FEATURE_NAMES: {feat}"
-            )
+            assert (
+                feat not in FRAME_V1_FEATURE_NAMES
+            ), f"Feature eliminada no debe estar en FRAME_V1_FEATURE_NAMES: {feat}"
 
 
 class TestFrameV1Calculator:
@@ -260,6 +275,6 @@ class TestFrameV1Calculator:
         """El vector de features no debe contener NaN para ningún pago del golden set."""
         for _, row in golden_rows.iterrows():
             vec = frame_calc.calculate_from_row(row)
-            assert not np.any(np.isnan(vec)), (
-                f"NaN en el vector para facility_id={row['facility_id']}"
-            )
+            assert not np.any(
+                np.isnan(vec)
+            ), f"NaN en el vector para facility_id={row['facility_id']}"

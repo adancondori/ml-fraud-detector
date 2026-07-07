@@ -5,6 +5,7 @@ Verifica que la conversión UTC→hora local sea correcta para ≥2 zonas latino
 
 Criterio de aceptación FRAME-03.
 """
+
 from __future__ import annotations
 
 import pandas as pd
@@ -44,9 +45,7 @@ class TestDstLocalHour:
         2025-10-05T03:00:00Z = 00:00 ART. Primera zona latinoamericana.
         """
         ts = pd.Timestamp("2025-10-05T03:00:00")  # naive UTC
-        hour, dow = FrameV1FeatureCalculator._local_hour_dow(
-            ts, "America/Argentina/Buenos_Aires"
-        )
+        hour, dow = FrameV1FeatureCalculator._local_hour_dow(ts, "America/Argentina/Buenos_Aires")
         assert hour == 0, f"Esperado medianoche ART (-3h), obtenido {hour}"
         assert dow == 6, f"2025-10-05 es domingo (dow=6), obtenido {dow}"
         assert hour in OFF_HOURS, "medianoche debe estar en OFF_HOURS"

@@ -7,6 +7,7 @@ The implementation follows the 31-feature contract:
 - transform() is leakage-safe inside the provided frame.
 - transform_with_warm_history() supports split boundaries and method-history carryover.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -92,11 +93,7 @@ def _rolling_shifted_stat(
     agg: str,
     window: str = "30D",
 ) -> pd.Series:
-    raw = (
-        df.groupby("user_id")
-        .rolling(window, on="created_at")[value_col]
-        .agg(agg)
-    )
+    raw = df.groupby("user_id").rolling(window, on="created_at")[value_col].agg(agg)
     raw = pd.Series(raw.droplevel(0).values, index=df.index)
     return _series_group_shift(raw.astype(np.float64), df["user_id"]).astype(np.float32)
 
@@ -105,16 +102,13 @@ class FeatureGroup(ABC):
     """Base interface for feature groups."""
 
     @abstractmethod
-    def fit(self, df_train: pd.DataFrame) -> "FeatureGroup":
-        ...
+    def fit(self, df_train: pd.DataFrame) -> "FeatureGroup": ...
 
     @abstractmethod
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        ...
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame: ...
 
     @abstractmethod
-    def feature_names(self) -> List[str]:
-        ...
+    def feature_names(self) -> List[str]: ...
 
 
 class TransactionalFeatures(FeatureGroup):
@@ -130,12 +124,10 @@ class TransactionalFeatures(FeatureGroup):
             raise RuntimeError("TransactionalFeatures requires fit() before transform()")
         out = df.copy()
         out["log_amount"] = np.log1p(out["amount"]).astype(np.float32)
-        out["amount_usd_ratio"] = (
-            out["amount"] / max(self._global_avg_amount, 1e-8)
-        ).astype(np.float32)
-        out["discount_ratio"] = (
-            out["discount"] / (out["amount"] + 0.01)
-        ).astype(np.float32)
+        out["amount_usd_ratio"] = (out["amount"] / max(self._global_avg_amount, 1e-8)).astype(
+            np.float32
+        )
+        out["discount_ratio"] = (out["discount"] / (out["amount"] + 0.01)).astype(np.float32)
         out["has_tip"] = (out["tip"] > 0).astype(np.int8)
         out["amount"] = out["amount"].astype(np.float32)
         return out
@@ -169,23 +161,20 @@ class VelocityFeatures(FeatureGroup):
 
     @staticmethod
     def _rolling_count(df: pd.DataFrame, window: str) -> pd.Series:
-        raw = (
-            df.groupby("user_id")
-            .rolling(window, on="created_at")["id"]
-            .count()
-        )
+        raw = df.groupby("user_id").rolling(window, on="created_at")["id"].count()
         values = raw.droplevel(0).values
         return pd.Series(values - 1, index=df.index).fillna(0).astype(np.float32)
 
     @staticmethod
     def _rolling_amount_sum(df: pd.DataFrame, window: str) -> pd.Series:
-        raw = (
-            df.groupby("user_id")
-            .rolling(window, on="created_at")["amount"]
-            .sum()
-        )
+        raw = df.groupby("user_id").rolling(window, on="created_at")["amount"].sum()
         values = raw.droplevel(0).values
-        return pd.Series(values - df["amount"].values, index=df.index).fillna(0).clip(lower=0).astype(np.float32)
+        return (
+            pd.Series(values - df["amount"].values, index=df.index)
+            .fillna(0)
+            .clip(lower=0)
+            .astype(np.float32)
+        )
 
     @staticmethod
     def _time_since_last(df: pd.DataFrame) -> pd.Series:
@@ -274,13 +263,7 @@ class BehavioralFeatures(FeatureGroup):
             split_first = df.loc[new_users].groupby("user_id")["created_at"].transform("min")
             created_at.loc[new_users] = split_first
 
-        return (
-            (df["created_at"] - created_at)
-            .dt.days
-            .clip(lower=0)
-            .fillna(0)
-            .astype(np.int32)
-        )
+        return (df["created_at"] - created_at).dt.days.clip(lower=0).fillna(0).astype(np.int32)
 
     @staticmethod
     def _discount_ratio_30d(df: pd.DataFrame) -> pd.Series:
@@ -291,9 +274,9 @@ class BehavioralFeatures(FeatureGroup):
     @staticmethod
     def _reversal_ratio_30d(df: pd.DataFrame) -> pd.Series:
         tmp = df.copy()
-        tmp["_is_reversal"] = tmp["status"].isin(
-            ["totally_refunded", "refunded_to_credit"]
-        ).astype(np.int8)
+        tmp["_is_reversal"] = (
+            tmp["status"].isin(["totally_refunded", "refunded_to_credit"]).astype(np.int8)
+        )
         return _rolling_shifted_stat(tmp, "_is_reversal", "mean", window="30D")
 
     def transform(
@@ -328,9 +311,7 @@ class ContextualFeatures(FeatureGroup):
 
     def fit(self, df_train: pd.DataFrame) -> "ContextualFeatures":
         self._global_avg_amount = float(df_train["amount"].mean())
-        self._facility_avg_amount = (
-            df_train.groupby("facility_id")["amount"].mean().to_dict()
-        )
+        self._facility_avg_amount = df_train.groupby("facility_id")["amount"].mean().to_dict()
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -341,9 +322,9 @@ class ContextualFeatures(FeatureGroup):
             .fillna(self._global_avg_amount)
             .astype(np.float32)
         )
-        out["amount_facility_ratio"] = (
-            out["amount"] / (out["facility_avg_amount"] + 0.01)
-        ).astype(np.float32)
+        out["amount_facility_ratio"] = (out["amount"] / (out["facility_avg_amount"] + 0.01)).astype(
+            np.float32
+        )
         return out
 
     def feature_names(self) -> List[str]:
@@ -377,9 +358,7 @@ class CreditFlowFeatures(FeatureGroup):
         prepaid_spend = self._prepaid_spend_30d(out)
         out["user_debit_count_30d"] = debit_count
         out["user_debit_amount_30d"] = debit_amount
-        out["credit_flow_ratio"] = (
-            debit_amount / (prepaid_spend + 0.01)
-        ).astype(np.float32)
+        out["credit_flow_ratio"] = (debit_amount / (prepaid_spend + 0.01)).astype(np.float32)
         return out
 
     def feature_names(self) -> List[str]:
@@ -448,8 +427,8 @@ class StaffRoleFeatures(FeatureGroup):
         mean_series = pd.Series(means, index=out.index, dtype=np.float64)
         std_series = pd.Series(stds, index=out.index, dtype=np.float64).replace(0, 1.0)
         out["staff_amount_zscore"] = (
-            (out["amount"] - mean_series) / std_series
-        ).fillna(0).astype(np.float32)
+            ((out["amount"] - mean_series) / std_series).fillna(0).astype(np.float32)
+        )
         return out
 
     def feature_names(self) -> List[str]:
@@ -483,9 +462,9 @@ class OperationalDiversityFeatures(FeatureGroup):
     @staticmethod
     def _reversal_count_30d(df: pd.DataFrame) -> pd.Series:
         tmp = df.copy()
-        tmp["_is_reversal"] = tmp["status"].isin(
-            ["totally_refunded", "refunded_to_credit"]
-        ).astype(np.int8)
+        tmp["_is_reversal"] = (
+            tmp["status"].isin(["totally_refunded", "refunded_to_credit"]).astype(np.int8)
+        )
         return _rolling_shifted_stat(tmp, "_is_reversal", "sum", window="30D")
 
     @staticmethod
@@ -590,7 +569,11 @@ class FeatureEngineer:
         combined = pd.concat([warm_marked, split_marked], ignore_index=True)
         combined = self._prepare_input(combined)
 
-        baseline = method_state["user_method_history"] if method_state else self.get_feature_state()["user_method_history"]
+        baseline = (
+            method_state["user_method_history"]
+            if method_state
+            else self.get_feature_state()["user_method_history"]
+        )
         transformed, final_state = self._transform_internal(
             combined,
             baseline_method_history=baseline,
@@ -644,7 +627,10 @@ class FeatureEngineer:
                 "player",
             )
         out["currency"] = (
-            out["currency"].fillna("USD").astype(str).str.upper()
+            out["currency"]
+            .fillna("USD")
+            .astype(str)
+            .str.upper()
             .replace({"EMPTY": "USD", "": "USD"})
         )
         return out.sort_values(["user_id", "created_at", "id"]).reset_index(drop=True)

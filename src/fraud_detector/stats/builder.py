@@ -12,6 +12,7 @@ appeared in train_df. Facilities absent from train_df receive fallback_level
 IQR guard rule (production spec): iqr_guarded = max(iqr, 1.0).
 Do NOT use iqr + 1e-6 (amplifies noise for near-uniform distributions).
 """
+
 from __future__ import annotations
 
 import datetime
@@ -137,9 +138,9 @@ class FacilityStatsBuilder:
                 }
 
         # Hard invariant: every facility in tz_map must be represented.
-        assert len(facilities) == len(tz_map), (
-            f"facilities coverage {len(facilities)} != tz_map size {len(tz_map)}"
-        )
+        assert len(facilities) == len(
+            tz_map
+        ), f"facilities coverage {len(facilities)} != tz_map size {len(tz_map)}"
 
         return {
             "schema_version": "facility-stats-v1",

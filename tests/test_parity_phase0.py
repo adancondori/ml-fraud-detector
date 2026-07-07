@@ -10,6 +10,7 @@ los afectados por el bug de getattr. Las demás features (velocidad, comportamie
 rolling) dependen de context rolling que el parquet enriquecido no reconstruye 1:1
 desde un único payment dict, por lo que no se verifican aquí.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,8 +26,8 @@ from fraud_detector.scoring.features import SingleFeatureCalculator
 FE_PATH = "output/models/feature_engineer.joblib"
 GOLDEN_PARQUET = "data/processed/val_features_enriched.parquet"
 
-FACILITY_AVG_IDX = FEATURE_NAMES.index("facility_avg_amount")   # 19
-STAFF_ZSCORE_IDX = FEATURE_NAMES.index("staff_amount_zscore")   # 27
+FACILITY_AVG_IDX = FEATURE_NAMES.index("facility_avg_amount")  # 19
+STAFF_ZSCORE_IDX = FEATURE_NAMES.index("staff_amount_zscore")  # 27
 TOL = 1e-6
 N_ROWS = 500
 MIN_FACILITIES = 20
@@ -42,9 +43,8 @@ def golden_rows():
     """Set dorado estratificado por facility_id: >=20 facilities, >=500 filas."""
     df = pd.read_parquet(GOLDEN_PARQUET)
     # Estratificar: tomar ~N_ROWS/MIN_FACILITIES filas por facility para cubrir diversidad.
-    sampled = (
-        df.groupby("facility_id", group_keys=False)
-        .apply(lambda g: g.head(max(1, N_ROWS // MIN_FACILITIES)), include_groups=False)
+    sampled = df.groupby("facility_id", group_keys=False).apply(
+        lambda g: g.head(max(1, N_ROWS // MIN_FACILITIES)), include_groups=False
     )
     # Restore facility_id after include_groups=False drops grouping column
     if "facility_id" not in sampled.columns:
@@ -56,9 +56,9 @@ def golden_rows():
         f"Set estratificado cubre solo {sampled['facility_id'].nunique()} facilities "
         f"(mínimo requerido: {MIN_FACILITIES})"
     )
-    assert len(sampled) >= N_ROWS, (
-        f"Set estratificado tiene solo {len(sampled)} filas (mínimo: {N_ROWS})"
-    )
+    assert (
+        len(sampled) >= N_ROWS
+    ), f"Set estratificado tiene solo {len(sampled)} filas (mínimo: {N_ROWS})"
     return sampled
 
 

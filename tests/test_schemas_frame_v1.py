@@ -34,16 +34,16 @@ class TestScoreRequestOptionalFields:
     def test_currency_is_none_by_default(self):
         """currency must NOT default to 'USD' silently."""
         req = ScoreRequest(**self._base_request())
-        assert req.currency is None, (
-            "currency defaulting to 'USD' would silence absence — must be None"
-        )
+        assert (
+            req.currency is None
+        ), "currency defaulting to 'USD' would silence absence — must be None"
 
     def test_facility_time_zone_iana_is_none_by_default(self):
         """facility_time_zone_iana must NOT default to 'UTC' silently."""
         req = ScoreRequest(**self._base_request())
-        assert req.facility_time_zone_iana is None, (
-            "facility_time_zone_iana defaulting to 'UTC' is the exact bias being corrected"
-        )
+        assert (
+            req.facility_time_zone_iana is None
+        ), "facility_time_zone_iana defaulting to 'UTC' is the exact bias being corrected"
 
     def test_amount_local_is_none_by_default(self):
         req = ScoreRequest(**self._base_request())

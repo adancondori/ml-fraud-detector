@@ -2,6 +2,7 @@
 
 No ClickHouse connection required.  All tests use in-memory DataFrames.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,6 +35,7 @@ from shadow_monitor import (  # noqa: E402
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_df(
     n_old: int = 200,
     n_new: int = 200,
@@ -61,8 +63,7 @@ def _make_df(
     # payment_created_at: spread over 15 days
     base_ts = pd.Timestamp("2026-06-15 00:00:00")
     payment_ts = [
-        base_ts + pd.Timedelta(seconds=int(s))
-        for s in rng.integers(0, 15 * 24 * 3600, total)
+        base_ts + pd.Timedelta(seconds=int(s)) for s in rng.integers(0, 15 * 24 * 3600, total)
     ]
     scored_ts = [t + pd.Timedelta(seconds=10) for t in payment_ts]
 
@@ -115,17 +116,19 @@ class TestComputeTop5Bias:
         percentiles[1] = 0.998
 
         base_ts = pd.Timestamp("2026-06-15 12:00:00")
-        df_new = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_NEW] * n,
-            "percentile": percentiles,
-            "amount_usd": amounts,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [json.dumps({"timezone_missing": False})] * n,
-            "payment_created_at": [base_ts] * n,
-            "scored_at": [base_ts] * n,
-        })
+        df_new = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_NEW] * n,
+                "percentile": percentiles,
+                "amount_usd": amounts,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [json.dumps({"timezone_missing": False})] * n,
+                "payment_created_at": [base_ts] * n,
+                "scored_at": [base_ts] * n,
+            }
+        )
         df_old = df_new.copy()
         df_old["scoring_mode"] = SHADOW_OLD
         df = pd.concat([df_old, df_new], ignore_index=True)
@@ -192,17 +195,19 @@ class TestComputeJaccardAtK:
         payment_ids = list(range(n))
         percentiles = np.linspace(0, 1, n)
 
-        df_old = pd.DataFrame({
-            "payment_id": payment_ids,
-            "scoring_mode": [SHADOW_OLD] * n,
-            "percentile": percentiles,
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": [""] * n,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * n,
-            "scored_at": [pd.Timestamp("2026-06-15")] * n,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": payment_ids,
+                "scoring_mode": [SHADOW_OLD] * n,
+                "percentile": percentiles,
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": [""] * n,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * n,
+                "scored_at": [pd.Timestamp("2026-06-15")] * n,
+            }
+        )
         df_new = df_old.copy()
         df_new["scoring_mode"] = SHADOW_NEW
 
@@ -214,28 +219,32 @@ class TestComputeJaccardAtK:
         """If top-k sets are completely disjoint, Jaccard = 0."""
         # shadow_old top-100: payment_ids 100-199 have high percentile
         # shadow_new top-100: payment_ids 0-99 have high percentile
-        df_old = pd.DataFrame({
-            "payment_id": list(range(200)),
-            "scoring_mode": [SHADOW_OLD] * 200,
-            "percentile": np.concatenate([np.zeros(100), np.ones(100)]),
-            "amount_usd": [10.0] * 200,
-            "is_anomaly": [False] * 200,
-            "currency": ["USD"] * 200,
-            "frame_flags": [""] * 200,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * 200,
-            "scored_at": [pd.Timestamp("2026-06-15")] * 200,
-        })
-        df_new = pd.DataFrame({
-            "payment_id": list(range(200)),
-            "scoring_mode": [SHADOW_NEW] * 200,
-            "percentile": np.concatenate([np.ones(100), np.zeros(100)]),
-            "amount_usd": [10.0] * 200,
-            "is_anomaly": [False] * 200,
-            "currency": ["USD"] * 200,
-            "frame_flags": [""] * 200,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * 200,
-            "scored_at": [pd.Timestamp("2026-06-15")] * 200,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": list(range(200)),
+                "scoring_mode": [SHADOW_OLD] * 200,
+                "percentile": np.concatenate([np.zeros(100), np.ones(100)]),
+                "amount_usd": [10.0] * 200,
+                "is_anomaly": [False] * 200,
+                "currency": ["USD"] * 200,
+                "frame_flags": [""] * 200,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * 200,
+                "scored_at": [pd.Timestamp("2026-06-15")] * 200,
+            }
+        )
+        df_new = pd.DataFrame(
+            {
+                "payment_id": list(range(200)),
+                "scoring_mode": [SHADOW_NEW] * 200,
+                "percentile": np.concatenate([np.ones(100), np.zeros(100)]),
+                "amount_usd": [10.0] * 200,
+                "is_anomaly": [False] * 200,
+                "currency": ["USD"] * 200,
+                "frame_flags": [""] * 200,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * 200,
+                "scored_at": [pd.Timestamp("2026-06-15")] * 200,
+            }
+        )
         df = pd.concat([df_old, df_new], ignore_index=True)
         j = compute_jaccard_at_k(df, k=100)
         assert j == pytest.approx(0.0)
@@ -243,31 +252,35 @@ class TestComputeJaccardAtK:
     def test_partial_overlap_correct_value(self):
         """50% overlap in top-10 gives Jaccard = 0.5 / 1.5 ≈ 0.333."""
         # 10 payments each; old ranks 0-9 top-10; new ranks 5-14 top-10 → overlap 5-9 = 5
-        df_old = pd.DataFrame({
-            "payment_id": list(range(20)),
-            "scoring_mode": [SHADOW_OLD] * 20,
-            "percentile": np.concatenate([np.linspace(0.5, 1.0, 10), np.zeros(10)]),
-            "amount_usd": [10.0] * 20,
-            "is_anomaly": [False] * 20,
-            "currency": ["USD"] * 20,
-            "frame_flags": [""] * 20,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * 20,
-            "scored_at": [pd.Timestamp("2026-06-15")] * 20,
-        })
+        df_old = pd.DataFrame(
+            {
+                "payment_id": list(range(20)),
+                "scoring_mode": [SHADOW_OLD] * 20,
+                "percentile": np.concatenate([np.linspace(0.5, 1.0, 10), np.zeros(10)]),
+                "amount_usd": [10.0] * 20,
+                "is_anomaly": [False] * 20,
+                "currency": ["USD"] * 20,
+                "frame_flags": [""] * 20,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * 20,
+                "scored_at": [pd.Timestamp("2026-06-15")] * 20,
+            }
+        )
         # new: payment_ids 5-14 have high percentile (overlap with old: 5,6,7,8,9)
         percs_new = np.zeros(20)
         percs_new[5:15] = np.linspace(0.5, 1.0, 10)
-        df_new = pd.DataFrame({
-            "payment_id": list(range(20)),
-            "scoring_mode": [SHADOW_NEW] * 20,
-            "percentile": percs_new,
-            "amount_usd": [10.0] * 20,
-            "is_anomaly": [False] * 20,
-            "currency": ["USD"] * 20,
-            "frame_flags": [""] * 20,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * 20,
-            "scored_at": [pd.Timestamp("2026-06-15")] * 20,
-        })
+        df_new = pd.DataFrame(
+            {
+                "payment_id": list(range(20)),
+                "scoring_mode": [SHADOW_NEW] * 20,
+                "percentile": percs_new,
+                "amount_usd": [10.0] * 20,
+                "is_anomaly": [False] * 20,
+                "currency": ["USD"] * 20,
+                "frame_flags": [""] * 20,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * 20,
+                "scored_at": [pd.Timestamp("2026-06-15")] * 20,
+            }
+        )
         df = pd.concat([df_old, df_new], ignore_index=True)
         # top-10 old: payment_ids 0-9; top-10 new: payment_ids 5-14
         # intersection = {5,6,7,8,9} = 5; union = {0..14} = 15
@@ -289,19 +302,26 @@ class TestComputeJaccardAtK:
 class TestComputeAlertRateBySegment:
     def test_aggregates_correctly(self):
         """Alert rates match manually computed values."""
-        df = pd.DataFrame({
-            "payment_id": range(6),
-            "scoring_mode": [
-                SHADOW_OLD, SHADOW_OLD, SHADOW_NEW, SHADOW_NEW, SHADOW_OLD, SHADOW_NEW
-            ],
-            "currency": ["USD", "USD", "USD", "MXN", "MXN", "MXN"],
-            "is_anomaly": [True, False, True, True, True, False],
-            "percentile": [0.9, 0.5, 0.95, 0.8, 0.7, 0.3],
-            "amount_usd": [100.0] * 6,
-            "frame_flags": [""] * 6,
-            "payment_created_at": [pd.Timestamp("2026-06-15")] * 6,
-            "scored_at": [pd.Timestamp("2026-06-15")] * 6,
-        })
+        df = pd.DataFrame(
+            {
+                "payment_id": range(6),
+                "scoring_mode": [
+                    SHADOW_OLD,
+                    SHADOW_OLD,
+                    SHADOW_NEW,
+                    SHADOW_NEW,
+                    SHADOW_OLD,
+                    SHADOW_NEW,
+                ],
+                "currency": ["USD", "USD", "USD", "MXN", "MXN", "MXN"],
+                "is_anomaly": [True, False, True, True, True, False],
+                "percentile": [0.9, 0.5, 0.95, 0.8, 0.7, 0.3],
+                "amount_usd": [100.0] * 6,
+                "frame_flags": [""] * 6,
+                "payment_created_at": [pd.Timestamp("2026-06-15")] * 6,
+                "scored_at": [pd.Timestamp("2026-06-15")] * 6,
+            }
+        )
         result = compute_alert_rate_by_segment(df)
         # USD / shadow_old: 2 rows, 1 alert -> 0.5
         usd_old = result[(result["currency"] == "USD") & (result["scoring_mode"] == SHADOW_OLD)]
@@ -345,17 +365,19 @@ class TestComputeOffHours:
         """shadow_new rows with timezone_missing=True raise tz_missing_rate."""
         n = 100
         flags = [json.dumps({"timezone_missing": i % 2 == 0}) for i in range(n)]
-        df = pd.DataFrame({
-            "payment_id": range(n),
-            "scoring_mode": [SHADOW_NEW] * n,
-            "percentile": [0.5] * n,
-            "amount_usd": [10.0] * n,
-            "is_anomaly": [False] * n,
-            "currency": ["USD"] * n,
-            "frame_flags": flags,
-            "payment_created_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
-            "scored_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
-        })
+        df = pd.DataFrame(
+            {
+                "payment_id": range(n),
+                "scoring_mode": [SHADOW_NEW] * n,
+                "percentile": [0.5] * n,
+                "amount_usd": [10.0] * n,
+                "is_anomaly": [False] * n,
+                "currency": ["USD"] * n,
+                "frame_flags": flags,
+                "payment_created_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
+                "scored_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
+            }
+        )
         oh = compute_off_hours(df, SHADOW_NEW)
         assert oh["tz_missing_rate"] == pytest.approx(0.5, abs=1e-6)
 

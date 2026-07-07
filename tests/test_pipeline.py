@@ -1,4 +1,5 @@
 """Tests for run_pipeline.py orchestrator."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,6 +10,7 @@ import pytest
 
 # Import orchestrator functions directly
 import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from run_pipeline import should_run, validate_prerequisites, STEP_INPUTS
 

@@ -7,6 +7,7 @@ Covers:
 - Integration test against the materialized artifact (skipped if files absent)
 - _MIN_CURRENCY_N threshold criterion (02-01)
 """
+
 from __future__ import annotations
 
 import json
@@ -159,7 +160,9 @@ def test_facility_c_iqr_zero_guarded(built_stats):
 
 def test_facility_d_tz_only_present(built_stats, synthetic_tz_map):
     """Facility D (tz-only, no train rows) must appear in stats with iana_tz resolved."""
-    assert "1004" in built_stats["facilities"], "Facility D must be in stats even with no train rows"
+    assert (
+        "1004" in built_stats["facilities"]
+    ), "Facility D must be in stats even with no train rows"
     entry = built_stats["facilities"]["1004"]
     assert entry.get("iana_tz"), "Facility D must have non-empty iana_tz"
     assert entry["fallback_level"] in {"currency", "global"}
@@ -167,9 +170,9 @@ def test_facility_d_tz_only_present(built_stats, synthetic_tz_map):
 
 def test_coverage_equals_tz_map(built_stats, synthetic_tz_map):
     """len(stats['facilities']) must equal len(tz_map) — not just groupby count."""
-    assert len(built_stats["facilities"]) == len(synthetic_tz_map), (
-        f"Expected {len(synthetic_tz_map)} facilities, got {len(built_stats['facilities'])}"
-    )
+    assert len(built_stats["facilities"]) == len(
+        synthetic_tz_map
+    ), f"Expected {len(synthetic_tz_map)} facilities, got {len(built_stats['facilities'])}"
 
 
 def test_all_entries_have_iana_tz(built_stats):
@@ -289,12 +292,10 @@ def test_integration_facility_coverage():
         s = json.load(f)
     tz_df = pd.read_parquet(TZ_PARQUET)
     expected = tz_df["facility_id"].nunique()
-    assert s["n_facilities"] == expected, (
-        f"n_facilities={s['n_facilities']} != expected {expected}"
-    )
-    assert len(s["facilities"]) == s["n_facilities"], (
-        f"len(facilities)={len(s['facilities'])} != n_facilities={s['n_facilities']}"
-    )
+    assert s["n_facilities"] == expected, f"n_facilities={s['n_facilities']} != expected {expected}"
+    assert (
+        len(s["facilities"]) == s["n_facilities"]
+    ), f"len(facilities)={len(s['facilities'])} != n_facilities={s['n_facilities']}"
 
 
 @pytest.mark.skipif(_INTEGRATION_SKIP, reason=_INTEGRATION_REASON)
@@ -320,9 +321,7 @@ def test_integration_iqr_guarded_count():
     """At least one facility must have iqr_guarded==1.0 (the IQR=0 cases)."""
     with open(STATS_JSON) as f:
         s = json.load(f)
-    n_guarded = sum(
-        1 for e in s["facilities"].values() if e.get("iqr") == 0.0
-    )
+    n_guarded = sum(1 for e in s["facilities"].values() if e.get("iqr") == 0.0)
     assert n_guarded > 0, "Expected at least one facility with iqr=0.0 (iqr_guarded=1.0)"
 
 

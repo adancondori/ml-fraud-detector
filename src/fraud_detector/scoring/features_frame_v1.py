@@ -12,6 +12,7 @@ para la misma transacción.
 
 FS-frame-v1 satisface FRAME-01, FRAME-02, FRAME-03.
 """
+
 from __future__ import annotations
 
 import math
@@ -30,41 +31,41 @@ from fraud_detector.utils.currency import normalize_amount_value
 # ---------------------------------------------------------------------------
 
 FRAME_V1_FEATURE_NAMES = [
-    "log_amount_fac",              # log1p(amount / (fmean + 0.01))
-    "discount_ratio",              # discount / max(amount, 0.01)
-    "has_tip",                     # 1 si tip > 0
-    "hour_sin_loc",                # sin(2π * local_hour / 24)
-    "hour_cos_loc",                # cos(2π * local_hour / 24)
-    "dow_sin_loc",                 # sin(2π * local_dow / 7)
-    "dow_cos_loc",                 # cos(2π * local_dow / 7)
-    "is_weekend_loc",              # local_dow >= 5
-    "is_off_hours_loc",            # local_hour in OFF_HOURS
-    "time_since_last_txn",         # segundos desde última transacción
-    "user_amount_24h_fac",         # user_amount_24h / (fmean + 0.01)
+    "log_amount_fac",  # log1p(amount / (fmean + 0.01))
+    "discount_ratio",  # discount / max(amount, 0.01)
+    "has_tip",  # 1 si tip > 0
+    "hour_sin_loc",  # sin(2π * local_hour / 24)
+    "hour_cos_loc",  # cos(2π * local_hour / 24)
+    "dow_sin_loc",  # sin(2π * local_dow / 7)
+    "dow_cos_loc",  # cos(2π * local_dow / 7)
+    "is_weekend_loc",  # local_dow >= 5
+    "is_off_hours_loc",  # local_hour in OFF_HOURS
+    "time_since_last_txn",  # segundos desde última transacción
+    "user_amount_24h_fac",  # user_amount_24h / (fmean + 0.01)
     "user_distinct_facilities_30d",
     "user_distinct_methods",
-    "amount_facility_ratio",       # amount / (fmean + 0.01)
+    "amount_facility_ratio",  # amount / (fmean + 0.01)
     "is_club_credit",
     "user_debit_count_30d",
-    "user_debit_amount_30d_fac",   # user_debit_amount_30d / (fmean + 0.01)
-    "credit_flow_ratio",           # debit_amount / max(prepaid, 0.01)
+    "user_debit_amount_30d_fac",  # user_debit_amount_30d / (fmean + 0.01)
+    "credit_flow_ratio",  # debit_amount / max(prepaid, 0.01)
     "is_staff",
     "paid_by_manager",
-    "staff_amount_zscore",         # (amount - staff_mean) / staff_std
+    "staff_amount_zscore",  # (amount - staff_mean) / staff_std
     "category_entropy_30d",
     "user_merchandise_ratio_30d",
-    "small_amount_at_facility",    # amount_facility_ratio < 0.2
+    "small_amount_at_facility",  # amount_facility_ratio < 0.2
     "very_small_amount_at_facility",  # amount_facility_ratio < 0.05
-    "off_hours_high_value_loc",    # is_off_hours_loc AND amount_facility_ratio > 3
+    "off_hours_high_value_loc",  # is_off_hours_loc AND amount_facility_ratio > 3
     "gateway_change_recent",
     "is_main_gateway",
     "is_first_gateway_for_user",
     "source_change_recent",
 ]
 
-assert len(FRAME_V1_FEATURE_NAMES) == 30, (
-    f"FS-frame-v1 contract violated: expected 30 features, got {len(FRAME_V1_FEATURE_NAMES)}"
-)
+assert (
+    len(FRAME_V1_FEATURE_NAMES) == 30
+), f"FS-frame-v1 contract violated: expected 30 features, got {len(FRAME_V1_FEATURE_NAMES)}"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -227,9 +228,7 @@ class FrameV1FeatureCalculator:
         # 4. Interacciones derivadas (usan amount_facility_ratio calculado arriba)
         small_amount_at_facility = float(amount_facility_ratio < 0.2)
         very_small_amount_at_facility = float(amount_facility_ratio < 0.05)
-        off_hours_high_value_loc = float(
-            is_off_hours_loc > 0 and amount_facility_ratio > 3
-        )
+        off_hours_high_value_loc = float(is_off_hours_loc > 0 and amount_facility_ratio > 3)
 
         # 5. Staff z-score — usa moneda original para lookup en stats aprendidos
         staff_amount_zscore = self._lookup_staff_zscore(amount_usd, currency_original, user_role)
@@ -238,38 +237,41 @@ class FrameV1FeatureCalculator:
         is_staff = float(user_role in ("court_manager", "court_operator", "teacher"))
 
         # 7. Ensamblar vector en orden FRAME_V1_FEATURE_NAMES
-        return np.array([
-            log_amount_fac,
-            discount_ratio,
-            has_tip,
-            hour_sin_loc,
-            hour_cos_loc,
-            dow_sin_loc,
-            dow_cos_loc,
-            is_weekend_loc,
-            is_off_hours_loc,
-            time_since_last_txn,
-            user_amount_24h_fac,
-            float(user_distinct_facilities_30d),
-            float(user_distinct_methods),
-            amount_facility_ratio,
-            float(is_club_credit),
-            float(user_debit_count_30d),
-            user_debit_amount_30d_fac,
-            credit_flow_ratio,
-            is_staff,
-            float(paid_by_manager),
-            staff_amount_zscore,
-            category_entropy_30d,
-            user_merchandise_ratio_30d,
-            small_amount_at_facility,
-            very_small_amount_at_facility,
-            off_hours_high_value_loc,
-            float(gateway_change_recent),
-            float(is_main_gateway),
-            float(is_first_gateway_for_user),
-            float(source_change_recent),
-        ], dtype=np.float32)
+        return np.array(
+            [
+                log_amount_fac,
+                discount_ratio,
+                has_tip,
+                hour_sin_loc,
+                hour_cos_loc,
+                dow_sin_loc,
+                dow_cos_loc,
+                is_weekend_loc,
+                is_off_hours_loc,
+                time_since_last_txn,
+                user_amount_24h_fac,
+                float(user_distinct_facilities_30d),
+                float(user_distinct_methods),
+                amount_facility_ratio,
+                float(is_club_credit),
+                float(user_debit_count_30d),
+                user_debit_amount_30d_fac,
+                credit_flow_ratio,
+                is_staff,
+                float(paid_by_manager),
+                staff_amount_zscore,
+                category_entropy_30d,
+                user_merchandise_ratio_30d,
+                small_amount_at_facility,
+                very_small_amount_at_facility,
+                off_hours_high_value_loc,
+                float(gateway_change_recent),
+                float(is_main_gateway),
+                float(is_first_gateway_for_user),
+                float(source_change_recent),
+            ],
+            dtype=np.float32,
+        )
 
     # ------------------------------------------------------------------
     # Public: surface 1 — real-time path
@@ -313,9 +315,7 @@ class FrameV1FeatureCalculator:
         if context.time_since_last_txn >= 0:
             time_since = float(context.time_since_last_txn)
         elif context.last_txn_at is not None:
-            time_since = max(
-                (created_at - pd.Timestamp(context.last_txn_at)).total_seconds(), 0.0
-            )
+            time_since = max((created_at - pd.Timestamp(context.last_txn_at)).total_seconds(), 0.0)
         else:
             time_since = 0.0
 
@@ -452,6 +452,4 @@ def _shannon_entropy(categories: list) -> float:
         return 0.0
     counts = Counter(categories)
     total = sum(counts.values())
-    return -sum(
-        (c / total) * math.log2(c / total) for c in counts.values() if c > 0
-    )
+    return -sum((c / total) * math.log2(c / total) for c in counts.values() if c > 0)
