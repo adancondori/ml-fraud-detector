@@ -58,9 +58,16 @@ class FrameFlags(BaseModel):
     All flags default to False so that existing clients that do not consume
     frame_flags are unaffected.  A True value means the corresponding context
     was absent from the request or could not be resolved.
+
+    Timezone precedence observability (payload → artifact → Etc/UTC):
+      - timezone_from_artifact: the payload IANA was absent/invalid and the
+        artifact's iana_tz was used (fallback level 2).
+      - timezone_missing: neither payload nor artifact resolved — Etc/UTC
+        was used (fallback level 3).
     """
 
     timezone_missing: bool = False
+    timezone_from_artifact: bool = False
     currency_missing: bool = False
     currency_unknown: bool = False
 

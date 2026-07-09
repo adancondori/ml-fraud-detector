@@ -16,12 +16,12 @@ FS-frame-v1 satisface FRAME-01, FRAME-02, FRAME-03.
 from __future__ import annotations
 
 import math
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 import joblib
 import numpy as np
 import pandas as pd
-from zoneinfo import ZoneInfo
 
 from fraud_detector.scoring.context import UserContext
 from fraud_detector.utils.currency import normalize_amount_value
@@ -122,6 +122,41 @@ class FrameV1FeatureCalculator:
         return local.hour, local.dayofweek
 
     # ------------------------------------------------------------------
+    # Public: timezone precedence — payload → artifact → Etc/UTC
+    # ------------------------------------------------------------------
+
+    def resolve_timezone(
+        self, facility_id: int, payload_iana: Optional[str] = None
+    ) -> Tuple[str, str]:
+        """Resuelve la IANA efectiva con precedencia payload → artefacto → Etc/UTC.
+
+        La IANA del payload se valida con ZoneInfo (tzdata es la autoridad —
+        sin tablas ni mapeos propios, design D5); si es inválida o falta, cae
+        a la iana_tz del artefacto; si tampoco existe, Etc/UTC.
+
+        Args:
+            facility_id: Facility del pago (lookup en el artefacto de stats).
+            payload_iana: IANA enviada por el caller (Rails en RT, join de
+                facilities.tzinfo_identifier en batch). '' cuenta como ausente
+                (default del LEFT JOIN de ClickHouse sin match).
+
+        Returns:
+            (iana_tz, source) donde source ∈ {"payload", "artifact", "utc"}.
+        """
+        if payload_iana:
+            try:
+                ZoneInfo(payload_iana)
+                return str(payload_iana), "payload"
+            except Exception:
+                pass  # IANA inválida — degradar por la cadena normal, con flag
+
+        entry = self._stats["facilities"].get(str(facility_id))
+        artifact_tz = entry.get("iana_tz") if entry is not None else None
+        if artifact_tz:
+            return str(artifact_tz), "artifact"
+        return "Etc/UTC", "utc"
+
+    # ------------------------------------------------------------------
     # Private: facility lookup with fallback chain
     # ------------------------------------------------------------------
 
@@ -202,13 +237,18 @@ class FrameV1FeatureCalculator:
         is_main_gateway: float,
         is_first_gateway_for_user: float,
         source_change_recent: float,
+        payload_iana: Optional[str] = None,
     ) -> np.ndarray:
         """Única implementación de la aritmética de marco.
 
         Recibe primitivos; retorna np.ndarray de shape (30,) en orden FRAME_V1_FEATURE_NAMES.
+        La zona para features temporales sigue la precedencia payload →
+        artefacto → Etc/UTC (resolve_timezone); payload_iana es la IANA fresca
+        que ambos paths inyectan (Rails en RT, join de facilities en batch).
         """
-        # 1. Lookup facility stats (mean, median, iqr_guarded, iana_tz)
-        fmean, fmedian, iqr_guarded, iana_tz = self._lookup_facility(facility_id)
+        # 1. Lookup facility stats (mean, median, iqr_guarded) + zona efectiva
+        fmean, fmedian, iqr_guarded, _artifact_tz = self._lookup_facility(facility_id)
+        iana_tz, _tz_source = self.resolve_timezone(facility_id, payload_iana)
 
         # 2. Magnitud relativa a facility
         log_amount_fac = math.log1p(amount_usd / (fmean + 0.01))
@@ -281,7 +321,8 @@ class FrameV1FeatureCalculator:
         """Calcula el vector FS-frame-v1 desde un pago real-time + UserContext.
 
         amount se normaliza a USD usando el patrón _payment_with_usd_amounts.
-        La zona IANA se resuelve desde el artefacto por facility_id.
+        La zona IANA sigue la precedencia payload (facility_time_zone_iana)
+        → artefacto → Etc/UTC.
 
         Args:
             payment: Dict con campos del pago (reservation_paid_out, currency,
@@ -359,6 +400,7 @@ class FrameV1FeatureCalculator:
             is_main_gateway=float(context.is_main_gateway or 0),
             is_first_gateway_for_user=float(context.is_first_gateway_for_user or 0),
             source_change_recent=float(context.source_change_recent or 0),
+            payload_iana=payment.get("facility_time_zone_iana"),
         )
 
     # ------------------------------------------------------------------
@@ -368,7 +410,9 @@ class FrameV1FeatureCalculator:
     def calculate_from_row(self, row) -> np.ndarray:
         """Calcula el vector FS-frame-v1 desde una fila del parquet enriquecido.
 
-        La zona IANA se resuelve SIEMPRE desde self._stats por facility_id.
+        La zona IANA sigue la misma precedencia que calculate(): si el row trae
+        facility_time_zone_iana (LEFT JOIN batch a facilities.tzinfo_identifier)
+        esa fuente fresca gana; si falta o es inválida, artefacto; luego Etc/UTC.
         No requiere columna time_zone en el row (Pitfall 1).
 
         amount en el row ya está en USD (normalizado por FeatureEngineer).
@@ -421,6 +465,7 @@ class FrameV1FeatureCalculator:
             is_main_gateway=float(row.get("is_main_gateway", 0) or 0),
             is_first_gateway_for_user=float(row.get("is_first_gateway_for_user", 0) or 0),
             source_change_recent=float(row.get("source_change_recent", 0) or 0),
+            payload_iana=row.get("facility_time_zone_iana"),
         )
 
 

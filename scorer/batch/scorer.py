@@ -128,6 +128,15 @@ _INSERT_COLUMNS = [
 # Fetch query — payments in a closed window [cursor_start, cursor_end].
 # Using a closed window makes the payment set deterministic: retries see
 # exactly the same rows and produce identical dedup tokens.
+#
+# The LEFT JOIN to facilities brings the fresh IANA timezone
+# (tzinfo_identifier, maintained by Rails' before_save and replicated by
+# peerdb) so batch scoring uses the same level-1 timezone source as the
+# real-time payload (design D1, frame-normalization-v1). The join is
+# ADDITIVE: the payment universe filters (including the user_id != 0 from
+# refactor step 4b) are untouched. facilities has ~1.9K rows — negligible
+# cost. A payment without a facility match gets '' (LowCardinality default),
+# which the calculator treats as absent → artifact → Etc/UTC fallback chain.
 _FETCH_SQL = """
 SELECT
     id AS payment_id,
@@ -147,8 +156,14 @@ SELECT
     effective_user_id,
     captured_at,
     gateway,
-    source_enum
+    source_enum,
+    f.facility_time_zone_iana
 FROM pbp_productionDB_optimized.payments FINAL
+LEFT JOIN (
+    SELECT id AS facility_join_id, tzinfo_identifier AS facility_time_zone_iana
+    FROM pbp_productionDB_optimized.facilities FINAL
+    WHERE _peerdb_is_deleted = 0
+) AS f ON f.facility_join_id = facility_id
 WHERE created_at >= {cursor_start:DateTime}
   AND created_at <= {cursor_end:DateTime}
   AND _peerdb_is_deleted = 0
@@ -362,6 +377,7 @@ class BatchScorer:
             "captured_at",
             "gateway",
             "source_enum",
+            "facility_time_zone_iana",
         ]
         payments = []
         for row in result.result_rows:

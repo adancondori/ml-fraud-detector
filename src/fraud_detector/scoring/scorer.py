@@ -56,8 +56,8 @@ class SingleTransactionScorer:
                 getattr(artifacts, "facility_stats", None) is not None
                 and getattr(artifacts, "thresholds_segmented", None) is not None
             ):
-                from fraud_detector.scoring.features_frame_v1 import FrameV1FeatureCalculator
                 from fraud_detector.scoring.classifier import SegmentedThresholdClassifier
+                from fraud_detector.scoring.features_frame_v1 import FrameV1FeatureCalculator
 
                 self._feature_calc = FrameV1FeatureCalculator(
                     facility_stats=artifacts.facility_stats,
@@ -145,12 +145,18 @@ class SingleTransactionScorer:
             is_anomaly, risk_level, percentile, fallback_level, calibration_segment = (
                 self._classifier.classify(raw_score, facility_id=facility_id, currency=currency)
             )
-            # Build observability flags — timezone_missing when the facility is absent
-            # from the artifact (fallback to Etc/UTC was used in _lookup_facility).
-            fid_str = str(facility_id)
-            tz_missing = self._feature_calc._stats["facilities"].get(fid_str) is None
+            # Build observability flags — the timezone precedence chain is
+            # payload → artifact → Etc/UTC (design D5). resolve_timezone is the
+            # same source of truth the feature calculator used, so the flags
+            # reflect exactly which level produced the temporal features:
+            #   timezone_from_artifact: payload absent/invalid, artifact used.
+            #   timezone_missing: neither resolved — Etc/UTC used.
+            _, tz_source = self._feature_calc.resolve_timezone(
+                facility_id, payment.get("facility_time_zone_iana")
+            )
             frame_flags = {
-                "timezone_missing": bool(tz_missing),
+                "timezone_missing": tz_source == "utc",
+                "timezone_from_artifact": tz_source == "artifact",
                 "currency_missing": payment.get("currency") is None,
                 "currency_unknown": False,
             }

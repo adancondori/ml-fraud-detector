@@ -17,10 +17,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from fraud_detector.scoring.context import UserContext
 from scorer.batch.context_provider import BatchContextProvider
 from scorer.batch.scorer import BatchScorer, assert_write_target_is_safe
-from fraud_detector.scoring.context import UserContext
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -481,3 +480,80 @@ def test_score_batch_aborts_when_write_equals_read():
 
     # Nothing was inserted.
     mock_write.insert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# SDD frame-normalization-v1 (fnv1-02): join aditivo de facilities.tzinfo_identifier
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_sql_joins_facility_tzinfo_identifier():
+    """El batch trae la IANA fresca vía LEFT JOIN a facilities (design D1).
+
+    El join es ADITIVO: los filtros del universo de pagos (incluyendo el
+    user_id != 0 del paso 4b del refactor Alternativa 1) quedan intactos.
+    """
+    from scorer.batch.scorer import _FETCH_SQL
+
+    assert "LEFT JOIN" in _FETCH_SQL
+    assert "tzinfo_identifier" in _FETCH_SQL
+    assert "facilities FINAL" in _FETCH_SQL
+    assert "facility_time_zone_iana" in _FETCH_SQL
+    # Universo de pagos intacto (join aditivo — prohibido tocar filtros)
+    assert "_peerdb_is_deleted = 0" in _FETCH_SQL
+    assert "payment_method NOT IN ('reversal', 'free')" in _FETCH_SQL
+    assert "user_id != 0" in _FETCH_SQL
+    assert "created_at >= {cursor_start:DateTime}" in _FETCH_SQL
+    assert "created_at <= {cursor_end:DateTime}" in _FETCH_SQL
+
+
+def _fetch_row_with_tz(payment_id, user_id, amount, created_at, iana="America/Toronto"):
+    """Fila de fetch con la columna 19 del join: facility_time_zone_iana."""
+    return _fetch_row(payment_id, user_id, amount, created_at) + (iana,)
+
+
+def test_fetch_payments_carries_facility_time_zone_iana():
+    """_fetch_payments materializa la columna del join en el payment dict."""
+    cursor = datetime(2026, 4, 28, 0, 0, 0)
+    cursor_end = datetime(2026, 4, 28, 15, 0, 0)
+    fetch_rows = [_fetch_row_with_tz(101, 42, 100.0, datetime(2026, 4, 28, 14, 30, 0))]
+
+    mock_read = _make_mock_ch_client(result_rows=fetch_rows)
+    batch_scorer = _make_batch_scorer(_mock_scorer(), mock_read, MagicMock())
+
+    payments = batch_scorer._fetch_payments(cursor, cursor_end)
+
+    assert len(payments) == 1
+    assert payments[0]["facility_time_zone_iana"] == "America/Toronto"
+
+
+def test_score_batch_passes_fresh_tz_to_calculator():
+    """El payment que llega al calculator lleva la IANA fresca como nivel 1.
+
+    FrameV1FeatureCalculator.calculate lee payment["facility_time_zone_iana"]
+    (precedencia payload → artefacto → UTC), así que basta con que el dict
+    del batch la contenga.
+    """
+    cursor = datetime(2026, 4, 28, 0, 0, 0, tzinfo=timezone.utc)
+    cursor_end = datetime(2026, 4, 28, 15, 0, 0)
+    fetch_rows = [_fetch_row_with_tz(101, 42, 100.0, datetime(2026, 4, 28, 14, 30, 0))]
+
+    mock_read = MagicMock()
+    cursor_end_result = MagicMock()
+    cursor_end_result.result_rows = [(cursor_end,)]
+    fetch_result = MagicMock()
+    fetch_result.result_rows = fetch_rows
+    context_result = MagicMock()
+    context_result.result_rows = []
+    mock_read.query.side_effect = [cursor_end_result, fetch_result] + [context_result] * 6
+    mock_write = MagicMock()
+    mock_scorer = _mock_scorer()
+
+    from fraud_detector.scoring.scorer import SingleTransactionScorer
+
+    with patch.object(SingleTransactionScorer, "_explain_top_factors", return_value=[]):
+        batch_scorer = _make_batch_scorer(mock_scorer, mock_read, mock_write)
+        batch_scorer.score_batch(cursor)
+
+    payment_arg = mock_scorer._feature_calc.calculate.call_args.args[0]
+    assert payment_arg["facility_time_zone_iana"] == "America/Toronto"

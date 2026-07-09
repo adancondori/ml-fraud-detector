@@ -278,3 +278,67 @@ class TestFrameV1Calculator:
             assert not np.any(
                 np.isnan(vec)
             ), f"NaN en el vector para facility_id={row['facility_id']}"
+
+
+class TestTimezonePrecedenceParity:
+    """Gate adversarial scorer-frame (SDD frame-normalization-v1, design D1).
+
+    Caso payload IANA ≠ artifact IANA: la paridad se define con ambos paths
+    usando la misma fuente efectiva fresca — RT la recibe en el payload de
+    Rails y batch la trae con el LEFT JOIN a facilities.tzinfo_identifier.
+    Ambas superficies deben producir el mismo vector frame-v1 Y usar de verdad
+    la zona fresca (no la del artefacto).
+    """
+
+    FRESH_TZ = "Pacific/Auckland"  # ≠ de cualquier iana_tz del artefacto (América)
+
+    def test_parity_with_fresh_tz_differing_from_artifact(
+        self, golden_rows, frame_calc, facility_stats
+    ):
+        import math
+        from zoneinfo import ZoneInfo
+
+        hour_sin_idx = FRAME_V1_FEATURE_NAMES.index("hour_sin_loc")
+        hour_cos_idx = FRAME_V1_FEATURE_NAMES.index("hour_cos_loc")
+
+        checked = 0
+        for _, row in golden_rows.head(30).iterrows():
+            fid = str(int(row["facility_id"]))
+            entry = facility_stats["facilities"].get(fid) or {}
+            artifact_tz = entry.get("iana_tz")
+            if artifact_tz == self.FRESH_TZ:
+                continue  # el caso exige payload ≠ artefacto
+
+            # RT: la IANA fresca llega en el payload de Rails
+            payment = _row_to_payment(row)
+            payment["facility_time_zone_iana"] = self.FRESH_TZ
+            context = _row_to_context(row)
+            rt_vec = frame_calc.calculate(payment, context).astype(np.float64)
+
+            # Batch: la IANA fresca llega vía el join de facilities.tzinfo_identifier
+            row_fresh = row.copy()
+            row_fresh["facility_time_zone_iana"] = self.FRESH_TZ
+            batch_vec = frame_calc.calculate_from_row(row_fresh).astype(np.float64)
+
+            diff = np.max(np.abs(rt_vec - batch_vec))
+            assert diff < TOL, (
+                f"Paridad rota con fuente fresca: diff={diff:.2e} "
+                f"facility={fid} (artifact_tz={artifact_tz})"
+            )
+
+            # La fuente fresca se usó de verdad: temporales según Auckland
+            ts = pd.Timestamp(row["created_at"])
+            if ts.tzinfo is not None:
+                ts = ts.tz_convert("UTC").tz_localize(None)
+            local_hour = ts.tz_localize("UTC").astimezone(ZoneInfo(self.FRESH_TZ)).hour
+            expected_sin = math.sin(2 * math.pi * local_hour / 24)
+            expected_cos = math.cos(2 * math.pi * local_hour / 24)
+            assert np.isclose(rt_vec[hour_sin_idx], expected_sin, atol=1e-6), (
+                f"hour_sin_loc no refleja la zona fresca del payload "
+                f"(facility={fid}, artifact_tz={artifact_tz}): "
+                f"esperado {expected_sin:.6f}, obtenido {rt_vec[hour_sin_idx]:.6f}"
+            )
+            assert np.isclose(rt_vec[hour_cos_idx], expected_cos, atol=1e-6)
+            checked += 1
+
+        assert checked >= 10, f"Solo {checked} filas verificadas — set insuficiente"
