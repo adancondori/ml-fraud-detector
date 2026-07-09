@@ -261,8 +261,8 @@ class TestFrameV1Calculator:
                 f"obtenido {vec[fac_idx]:.4f}"
             )
             assert vec[ratio_idx] > 1, (
-                f"amount_facility_ratio debe ser >1 cuando amount ({amount:.2f}) > fmean ({fmean:.2f}), "
-                f"obtenido {vec[ratio_idx]:.4f}"
+                f"amount_facility_ratio debe ser >1 cuando "
+                f"amount ({amount:.2f}) > fmean ({fmean:.2f}), obtenido {vec[ratio_idx]:.4f}"
             )
             tested += 1
         assert tested >= 5, f"Solo {tested} filas con amount > fmean — fixture insuficiente"
