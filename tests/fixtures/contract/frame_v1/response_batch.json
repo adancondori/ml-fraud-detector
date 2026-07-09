@@ -1,0 +1,15 @@
+{
+  "feature_frame_version": "frame-v1",
+  "payment_id": 987654,
+  "user_id": 42,
+  "facility_id": 7,
+  "raw_score": 0.5231,
+  "risk_level": "critical",
+  "amount_usd": 88.42,
+  "amount_local": 120.0,
+  "currency": "CAD",
+  "amount_usd_display": 88.42,
+  "model_version": "frame-v1",
+  "feature_version": "frame-v1",
+  "threshold_version": "segmented-v1"
+}

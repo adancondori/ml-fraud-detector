@@ -1,0 +1,28 @@
+{
+  "feature_frame_version": "frame-v1",
+  "raw_score": 0.4123,
+  "percentile": 97.5,
+  "risk_level": "high",
+  "is_anomaly": true,
+  "factors": [
+    {
+      "feature": "log_amount_fac",
+      "value": 2.31,
+      "z_score": 3.1,
+      "direction": "high"
+    }
+  ],
+  "model_version": "frame-v1",
+  "feature_version": "frame-v1",
+  "threshold_version": "segmented-v1",
+  "calibration_segment": "facility:7",
+  "fallback_level": "facility",
+  "frame_flags": {
+    "timezone_missing": false,
+    "timezone_from_artifact": false,
+    "currency_missing": false,
+    "currency_unknown": false
+  },
+  "amount_local": 120.0,
+  "currency": "CAD"
+}

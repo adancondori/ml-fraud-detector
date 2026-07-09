@@ -1,0 +1,14 @@
+{
+  "feature_frame_version": "frame-v1",
+  "payment_id": 987655,
+  "user_id": 42,
+  "facility_id": 7,
+  "reservation_paid_out": 150.0,
+  "created_at": "2026-07-01T18:30:00Z",
+  "discount": 0.0,
+  "tip": 0.0,
+  "payment_method": "card",
+  "category": "reservation",
+  "club_credit_flag": false,
+  "paid_by_manager": false
+}
