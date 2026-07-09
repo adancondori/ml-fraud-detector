@@ -1,13 +1,21 @@
 """FacilityStatsBuilder: compute per-facility reference stats from training data.
 
 Produces a dict suitable for JSON serialization with the following top-level keys:
-  schema_version, built_at, universe_filter, train_rows, n_facilities,
-  min_n_threshold, global_fallback, currency_fallbacks, facilities.
+  schema_version, built_at, universe_filter, stats_window_start, stats_window_end,
+  shadow_period_start, amount_source, train_rows, n_facilities, min_n_threshold,
+  min_currency_n_threshold, global_fallback, currency_fallbacks, facilities.
 
 The 'facilities' dict maps str(facility_id) -> entry for EVERY facility_id
-present in tz_map (1876 in production), regardless of whether that facility
-appeared in train_df. Facilities absent from train_df receive fallback_level
-'currency' or 'global' with magnitude stats (median/mean/iqr) set to None.
+present in iana_map (all live facilities in production), regardless of whether
+that facility appeared in train_df. Facilities absent from train_df receive
+fallback_level 'currency' or 'global' with magnitude stats set to None.
+
+iana_tz source (frame-normalization-v1, design D6): the IANA timezone comes
+straight from the replicated column ``facilities.tzinfo_identifier`` (same
+source Rails sends in the real-time payload). There is NO Rails->IANA mapping
+dictionary anymore. An empty/None identifier yields ``iana_tz: null`` and the
+scoring path degrades through the normal fallback chain (payload -> artifact
+-> Etc/UTC) instead of breaking the build.
 
 IQR guard rule (production spec): iqr_guarded = max(iqr, 1.0).
 Do NOT use iqr + 1e-6 (amplifies noise for near-uniform distributions).
@@ -18,10 +26,19 @@ from __future__ import annotations
 import datetime
 from typing import Optional
 
-import numpy as np
 import pandas as pd
 
-from fraud_detector.stats.tz_mapping import resolve_iana
+# Universo canónico (decisión humana 3, frame-normalization-v1):
+# los 4 predicados literales que el batch scorer y el loader aplican.
+CANONICAL_UNIVERSE_FILTER = (
+    "FINAL AND _peerdb_is_deleted=0 AND "
+    "payment_method NOT IN ('reversal','free') AND user_id != 0"
+)
+
+# Mapping de monto fuente (design D9): la columna interna 'amount' de los
+# pipelines offline es un alias de payments.reservation_paid_out. No existe
+# una columna física payments.amount.
+CANONICAL_AMOUNT_SOURCE = "payments.reservation_paid_out AS amount"
 
 # Minimum number of train rows required for a currency to get dedicated fallback stats.
 # Currencies below this threshold fall back to global (not per-currency) stats.
@@ -33,7 +50,14 @@ class FacilityStatsBuilder:
 
     Usage::
 
-        stats = FacilityStatsBuilder().build(train_df, tz_map, fid_currency)
+        stats = FacilityStatsBuilder().build(
+            train_df,
+            iana_map,
+            fid_currency,
+            stats_window_start="2025-01-01",
+            stats_window_end="2025-06-30",
+            shadow_period_start="2025-07-01",
+        )
     """
 
     MIN_N: int = 30  # facilities with n < MIN_N use currency/global fallback
@@ -41,24 +65,44 @@ class FacilityStatsBuilder:
     def build(
         self,
         train_df: pd.DataFrame,
-        tz_map: dict[int, str],
+        iana_map: dict[int, Optional[str]],
         fid_currency: dict[int, str],
+        *,
+        stats_window_start: str,
+        stats_window_end: str,
+        shadow_period_start: str,
+        amount_source: str = CANONICAL_AMOUNT_SOURCE,
     ) -> dict:
         """Compute per-facility stats.
 
         Args:
-            train_df: DataFrame filtered to the scorer universe
-                (_peerdb_is_deleted=0 AND payment_method NOT IN ('reversal','free')).
+            train_df: DataFrame filtered to the canonical scorer universe
+                (FINAL AND _peerdb_is_deleted=0 AND payment_method NOT IN
+                ('reversal','free') AND user_id != 0).
                 Required columns: amount (numeric), facility_id (int), currency (str).
-            tz_map: Mapping {facility_id -> rails_tz_name} for ALL facilities
-                (including those absent from train_df). Typically derived from
-                output/revision/facility_tz.parquet.
+            iana_map: Mapping {facility_id -> tzinfo_identifier} for ALL live
+                facilities (including those absent from train_df), read from the
+                replicated ClickHouse column ``facilities.tzinfo_identifier``.
+                Empty/None values produce ``iana_tz: null`` without aborting.
             fid_currency: Mapping {facility_id -> dominant_currency} for facilities
                 that appear in train_df. Used to choose the currency fallback.
+            stats_window_start: ISO date (YYYY-MM-DD) — inicio de la ventana de
+                pagos usada para las stats.
+            stats_window_end: ISO date — fin (inclusivo) de la ventana de stats.
+            shadow_period_start: ISO date — inicio del período de shadow/
+                evaluación. La generación FALLA si la ventana lo solapa
+                (se exige stats_window_end < shadow_period_start).
+            amount_source: Declaración del mapping de monto fuente.
 
         Returns:
             A dict ready for json.dump() with schema_version='facility-stats-v1'.
+
+        Raises:
+            ValueError: si la ventana de stats solapa el período de shadow o
+                está invertida (anti-fuga temporal, spec artefactos-stats).
         """
+        self._validate_window(stats_window_start, stats_window_end, shadow_period_start)
+
         train_df = train_df.copy()
         train_df["amount"] = pd.to_numeric(train_df["amount"], errors="coerce")
 
@@ -78,13 +122,14 @@ class FacilityStatsBuilder:
             eligible_currencies.append("USD")
         currency_fallbacks = self._compute_currency_fallbacks(train_df, eligible_currencies)
 
-        # --- Per-facility stats (base loop is tz_map, not train_df.groupby) ---
-        # This ensures ALL 1876 facilities have an entry even with no train history.
+        # --- Per-facility stats (base loop is iana_map, not train_df.groupby) ---
+        # This ensures ALL live facilities have an entry even with no train history.
         per_fid_stats = self._compute_per_facility(train_df)
 
         facilities: dict[str, dict] = {}
-        for fid, rails_tz in tz_map.items():
-            iana_tz = resolve_iana(rails_tz)
+        for fid, tzinfo_identifier in iana_map.items():
+            # Columna replicada tal cual; vacío/None -> null (sin diccionario propio).
+            iana_tz = tzinfo_identifier if tzinfo_identifier else None
             fid_key = str(fid)
             dominant_currency = fid_currency.get(fid, "USD")
 
@@ -121,7 +166,7 @@ class FacilityStatsBuilder:
                         "fallback_level": fallback_level,
                     }
             else:
-                # Facility is in tz_map but has NO rows in train_df.
+                # Facility is in iana_map but has NO rows in train_df.
                 # Provide iana_tz + currency fallback stats so real-time path
                 # never hits a KeyError for new/cold-start facilities.
                 fallback_stats, fallback_level = self._resolve_fallback(
@@ -137,17 +182,21 @@ class FacilityStatsBuilder:
                     "fallback_level": fallback_level,
                 }
 
-        # Hard invariant: every facility in tz_map must be represented.
+        # Hard invariant: every facility in iana_map must be represented.
         assert len(facilities) == len(
-            tz_map
-        ), f"facilities coverage {len(facilities)} != tz_map size {len(tz_map)}"
+            iana_map
+        ), f"facilities coverage {len(facilities)} != iana_map size {len(iana_map)}"
 
         return {
             "schema_version": "facility-stats-v1",
-            "built_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "universe_filter": (
-                "_peerdb_is_deleted=0 AND payment_method NOT IN ('reversal','free') AND FINAL"
+            "built_at": datetime.datetime.now(datetime.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
             ),
+            "universe_filter": CANONICAL_UNIVERSE_FILTER,
+            "stats_window_start": stats_window_start,
+            "stats_window_end": stats_window_end,
+            "shadow_period_start": shadow_period_start,
+            "amount_source": amount_source,
             "train_rows": int(len(train_df)),
             "n_facilities": int(len(facilities)),
             "min_n_threshold": int(self.MIN_N),
@@ -160,6 +209,29 @@ class FacilityStatsBuilder:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_window(
+        stats_window_start: str,
+        stats_window_end: str,
+        shadow_period_start: str,
+    ) -> None:
+        """Anti-fuga temporal: la ventana de stats debe terminar antes del shadow."""
+        start = datetime.date.fromisoformat(stats_window_start)
+        end = datetime.date.fromisoformat(stats_window_end)
+        shadow_start = datetime.date.fromisoformat(shadow_period_start)
+
+        if start >= end:
+            raise ValueError(
+                f"ventana de stats invertida o vacía: "
+                f"stats_window_start={stats_window_start} >= stats_window_end={stats_window_end}"
+            )
+        if end >= shadow_start:
+            raise ValueError(
+                f"la ventana de stats solapa el período de shadow/evaluación: "
+                f"stats_window_end={stats_window_end} >= "
+                f"shadow_period_start={shadow_period_start} (se exige end < T)"
+            )
 
     def _compute_global_fallback(self, train_df: pd.DataFrame) -> dict:
         """Compute magnitude stats across all rows in train_df."""
