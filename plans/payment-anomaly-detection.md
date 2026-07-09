@@ -299,12 +299,17 @@ El frame-v1 vigente se entrenó con train Ene–Jun 2025; hay datos hasta jul 20
 | 0 | Versionar en git este plan + `scripts/verify_alt1_viability.py` (hoy untracked) | — |
 | 1 | Gate off-hours con superficie explícita (población = sanidad; top-5%/población = sesgo) + test | — |
 | 2 | Re-extracción de datos + regenerar `facility_stats_v1` | — |
-| 3 | Reentrenar frame-v1 (3 semillas) + recalibrar umbrales + gates §6.5 | 2 |
+| 3 | Reentrenar frame-v1 (3 semillas) + recalibrar umbrales + gates §6.5 | 2, **6** (los gates del reentrenamiento se juzgan con el scoreboard — construir el juez antes que lo juzgado) |
 | 4 | `src/fraud_detector/scoring/rules.py` — 6 reglas de §4.1: 4 activas (`card_testing_burst`, `card_testing_failed`, `new_user_burst`, `velocity_extreme`), 1 en shadow (`third_party_multi`), 1 señal agregada por facility (`discount_extreme`) + config de umbrales + tests | 1 |
 | 4b | Alinear universo batch↔loader: añadir `user_id != 0` a `_FETCH_SQL` (`scorer/batch/scorer.py:151`) **y a `_CURSOR_END_SQL` (`scorer/batch/scorer.py:161`)** — si el cursor no filtra, puede avanzar apoyado en pagos fuera del universo — + tests de ambos | — |
 | 4c | `multi_account_token` (única regla nueva de la taxonomía extendida que entra pre-cutover, decisión de alcance §4.1b): regla de flujo ~3/día, guard de familias (`users_relations`/`user_children`), fuente `user_tokens` + tests 8–10 §7 | 4 |
 | 5 | Fuente `failed_payment_logs`: query canónica + regla `card_testing_failed` + medición de volumen | 4 |
-| 6 | Scoreboard nuevo: `scripts/eval_scoreboard.py` (EF@k tipificado, sesgos, estabilidad) **con verificación programática de disyunción feature↔proxy integrada** (reutilizar `scripts/validate_if40_pivot_disjoint.py`) y corriendo en CI; reemplaza eval centrado en refund-AUC | 3 |
+| 6 | Scoreboard nuevo: `scripts/eval_scoreboard.py` (EF@k tipificado, sesgos, estabilidad) **con verificación programática de disyunción feature↔proxy integrada** (reutilizar `scripts/validate_if40_pivot_disjoint.py`) y corriendo en CI; reemplaza eval centrado en refund-AUC. Se construye y valida contra los artefactos frame-v1 vigentes + fixture sintético (§7.4); corre sobre el campeón reentrenado en los pasos 3 y 9 | 1 |
+
+**Secuencia de ejecución (2026-07-09, revisada):** 0 → 4b → 1 → 6 → 2 → 3 → 4 → 4c → 5 → 7 → 8 → 9 → 10.
+No se reentrena antes de cerrar la superficie de scoring (4b) ni de tener el juez automático (6).
+El paso 2 (re-extracción) es I/O-bound e independiente: puede lanzarse en paralelo con 1/6 sin
+violar la secuencia — lo único que exige el orden es que 3 no arranque sin 6 terminado.
 | 7 | Cerrar Plan B: arquetipos sobre modelo reentrenado + campos en `ScoreResponse` | 3 |
 | 8 | Alerta unificada (flags + score + arquetipo) en el scorer batch | 4,7 |
 | 9 | Backtest de capas completo (reglas + IF + arquetipos) sobre test reciente → reporte + cola HITL para validación humana (base real del scoreboard) | **4b (bloqueante)**, 6, 8 |

@@ -396,6 +396,30 @@ def test_guardrail_allows_nonlocal_with_explicit_bypass():
     )
 
 
+def test_fetch_sql_excludes_user_id_zero():
+    """Paso 4b: el universo del batch debe coincidir con el del loader.
+
+    El loader de entrenamiento excluye `user_id != 0` (loader.py); sin el
+    mismo filtro, el batch puntuaría ~47K pagos/año con historial de usuario
+    vacío — una superficie distinta a la del modelo.
+    """
+    from scorer.batch.scorer import _FETCH_SQL
+
+    assert "user_id != 0" in _FETCH_SQL
+
+
+def test_cursor_end_sql_excludes_user_id_zero():
+    """Paso 4b: el cursor no debe avanzar apoyado en pagos fuera del universo.
+
+    Si `_CURSOR_END_SQL` resuelve cursor_end con un pago user_id=0 más
+    reciente que el último pago del universo, ese tramo queda marcado como
+    procesado sin haberse puntuado.
+    """
+    from scorer.batch.scorer import _CURSOR_END_SQL
+
+    assert "user_id != 0" in _CURSOR_END_SQL
+
+
 def test_fetch_sql_aliases_real_payment_id_column():
     """The prod `payments` PK column is `id`; the fetch SQL must alias it.
 

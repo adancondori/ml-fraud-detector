@@ -153,6 +153,7 @@ WHERE created_at >= {cursor_start:DateTime}
   AND created_at <= {cursor_end:DateTime}
   AND _peerdb_is_deleted = 0
   AND payment_method NOT IN ('reversal', 'free')
+  AND user_id != 0
 ORDER BY created_at ASC
 """
 
@@ -164,6 +165,7 @@ FROM pbp_productionDB_optimized.payments FINAL
 WHERE created_at >= {cursor_start:DateTime}
   AND _peerdb_is_deleted = 0
   AND payment_method NOT IN ('reversal', 'free')
+  AND user_id != 0
 """
 
 
