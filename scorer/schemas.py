@@ -34,6 +34,10 @@ class ScoreRequest(BaseModel):
     # Optional in frame-v1: None = absent (generates frame_flags.timezone_missing).
     # NEVER default to "UTC" — silencing timezone absence is the exact bias being corrected.
     facility_time_zone_iana: Optional[str] = None
+    # Rails time-zone name (e.g. "Eastern Time (US & Canada)") — echo metadata only,
+    # NEVER mapped to IANA here (no Rails→IANA table in this repo, design D5).
+    # None = absent; no default that would disguise absence.
+    facility_time_zone: Optional[str] = None
     # Informational only — amount in the facility's local currency (for logging/context).
     # NOT passed to calculate(); used by upstream callers that want to log local amounts.
     amount_local: Optional[float] = None
@@ -76,6 +80,13 @@ class ScoreResponse(BaseModel):
     calibration_segment: Optional[str] = None
     fallback_level: Optional[str] = None
     frame_flags: Optional[FrameFlags] = None
+    # Monetary echo metadata (frame-v1 contract): the scorer echoes back the
+    # local amount/currency it received. amount_usd_display is OPTIONAL and
+    # MUST be omitted (never invented) when no conversion rates are available
+    # in-process — the real-time path has none (human decision 1).
+    amount_local: Optional[float] = None
+    currency: Optional[str] = None
+    amount_usd_display: Optional[float] = None
 
 
 class BatchScoreRequest(BaseModel):
@@ -94,7 +105,14 @@ class CriticalAlert(BaseModel):
     facility_id: int
     raw_score: float
     risk_level: str
+    # amount_usd is the existing analytic value (USD-converted in the batch
+    # pipeline); it is kept as-is (design D8). amount_usd_display carries the
+    # same converted value under the honest contract key, next to the raw
+    # local amount and its currency.
     amount_usd: float
+    amount_local: Optional[float] = None
+    currency: Optional[str] = None
+    amount_usd_display: Optional[float] = None
     model_version: Optional[str] = None
     feature_version: Optional[str] = None
     threshold_version: Optional[str] = None

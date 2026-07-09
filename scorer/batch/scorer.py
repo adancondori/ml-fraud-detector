@@ -299,9 +299,7 @@ class BatchScorer:
 
         if self._scorer_shadow is not None:
             # Dual-run mode: produce 2 rows per payment (shadow_old + shadow_new).
-            rows_old, rows_new, critical_alerts = self._score_all_dual(
-                payments, ctx_map
-            )
+            rows_old, rows_new, critical_alerts = self._score_all_dual(payments, ctx_map)
             total_scored = len(rows_old) + len(rows_new)
 
             # Step 4: INSERT both sets with distinct dedup tokens; isolate failures.
@@ -472,7 +470,11 @@ class BatchScorer:
             ]
             scored_rows.append(row)
 
-            # Collect critical alerts for response
+            # Collect critical alerts for response.
+            # Monetary contract (frame-v1): amount_local/currency are the raw
+            # facility-local values; amount_usd_display carries the converted
+            # value (batch has conversion available, unlike real-time).
+            # amount_usd stays as the existing analytic key (design D8).
             if risk_level == "critical":
                 critical_alerts.append(
                     {
@@ -482,6 +484,9 @@ class BatchScorer:
                         "raw_score": raw_score,
                         "risk_level": risk_level,
                         "amount_usd": amount_usd,
+                        "amount_local": float(payment.get("reservation_paid_out") or 0),
+                        "currency": payment.get("currency"),
+                        "amount_usd_display": amount_usd,
                         "model_version": model_version,
                         "feature_version": getattr(scorer, "_feature_version", "base-31"),
                         "threshold_version": getattr(scorer, "_threshold_version", "v1"),
@@ -646,6 +651,9 @@ class BatchScorer:
                             "raw_score": result.score,
                             "risk_level": result.risk_level,
                             "amount_usd": amount_usd,
+                            "amount_local": float(payment.get("reservation_paid_out") or 0),
+                            "currency": payment.get("currency"),
+                            "amount_usd_display": amount_usd,
                             "model_version": result.model_version,
                             "feature_version": result.feature_version,
                             "threshold_version": result.threshold_version,
@@ -654,9 +662,7 @@ class BatchScorer:
                     )
 
         scoring_elapsed = time.monotonic() - t_score
-        logger.info(
-            f"BatchScorer (dual): scored {len(rows_old)} pairs in {scoring_elapsed:.2f}s"
-        )
+        logger.info(f"BatchScorer (dual): scored {len(rows_old)} pairs in {scoring_elapsed:.2f}s")
         return rows_old, rows_new, critical_alerts
 
     def _insert_chunks_dual(

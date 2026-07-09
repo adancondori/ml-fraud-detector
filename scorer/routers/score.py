@@ -9,8 +9,8 @@ from loguru import logger
 
 from fraud_detector.scoring.scorer import SingleTransactionScorer
 from scorer import dependencies as _deps
+from scorer.batch.scorer import DEFAULT_ANOMALY_SCORES_TABLE, BatchScorer
 from scorer.dependencies import get_read_ch_client, get_scorer, get_write_ch_client
-from scorer.batch.scorer import DEFAULT_ANOMALY_SCORES_TABLE
 from scorer.schemas import (
     BatchScoreRequest,
     BatchScoreResponse,
@@ -21,12 +21,10 @@ from scorer.schemas import (
     ScoreResponse,
 )
 
-from scorer.batch.scorer import BatchScorer
-
 router = APIRouter(tags=["scoring"])
 
 
-@router.post("/score", response_model=ScoreResponse)
+@router.post("/score", response_model=ScoreResponse, response_model_exclude_none=True)
 def score_single(
     request: ScoreRequest,
     scorer: SingleTransactionScorer = Depends(get_scorer),
@@ -36,6 +34,11 @@ def score_single(
     Delegates entirely to SingleTransactionScorer.score() — no feature
     reimplementation here.  FastAPI runs sync def endpoints in a threadpool,
     which is correct for CPU-bound sklearn work.
+
+    Monetary echo (frame-v1 contract): amount_local/currency are echoed back
+    from the request. amount_usd_display is never set here — the real-time
+    process has no conversion rates in memory, and absent keys are dropped
+    via response_model_exclude_none (MUST be omitted, not invented).
     """
     payment = request.model_dump()
     result = scorer.score(payment)
@@ -56,6 +59,8 @@ def score_single(
         calibration_segment=result.calibration_segment,
         fallback_level=result.fallback_level,
         frame_flags=frame_flags_obj,
+        amount_local=request.amount_local,
+        currency=request.currency,
     )
 
 
@@ -86,9 +91,7 @@ def score_batch(
         scorer_shadow=_deps._state.get("scorer_new"),
         read_ch_client=read_ch_client,
         write_ch_client=write_ch_client,
-        anomaly_scores_table=_deps._state.get(
-            "anomaly_scores_table", DEFAULT_ANOMALY_SCORES_TABLE
-        ),
+        anomaly_scores_table=_deps._state.get("anomaly_scores_table", DEFAULT_ANOMALY_SCORES_TABLE),
         read_fingerprint=_deps._state.get("read_fingerprint"),
         write_fingerprint=_deps._state.get("write_fingerprint"),
         write_host=_deps._state.get("write_host"),
