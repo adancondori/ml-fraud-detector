@@ -60,15 +60,36 @@ GUARDRAIL_HIGH = 0.048
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Calibración segmentada de thresholds")
+    parser.add_argument(
+        "--stats",
+        type=Path,
+        default=STATS_PATH,
+        help="Ruta del artefacto facility_stats (p. ej. candidato, fnv1-03)",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=OUTPUT_PATH,
+        help="Ruta de salida del artefacto thresholds (p. ej. candidato)",
+    )
+    args = parser.parse_args()
+    stats_path: Path = args.stats
+    output_path: Path = args.out
+
     print("=" * 60)
     print("calibrate_segmented_thresholds.py — Offline calibration")
     print("=" * 60)
+    print(f"  stats artifact: {stats_path}")
+    print(f"  output:         {output_path}")
 
     # ------------------------------------------------------------------
     # Load artifacts
     # ------------------------------------------------------------------
     print("\n[1/4] Loading artifacts...")
-    with open(STATS_PATH) as f:
+    with open(stats_path) as f:
         stats = json.load(f)
     print(f"  facility_stats_v1.json: {len(stats['facilities'])} entries")
 
@@ -166,9 +187,10 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Write artifact
     # ------------------------------------------------------------------
-    with open(OUTPUT_PATH, "w") as f:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
         json.dump(thresholds, f, indent=2)
-    print(f"\n  Written: {OUTPUT_PATH}")
+    print(f"\n  Written: {output_path}")
 
     print("\n  Summary:")
     print(f"    global p95:  {thresholds['binary_threshold']:.6f}")
