@@ -8,6 +8,10 @@ computes metrics over the dual-run rows (scoring_mode IN ('shadow_old',
   SHAD-02-B  top5_bias              — top-5% winsorized p99.9 amount ratio
   SHAD-02-C  off_hours              — UTC hour approximation + tz_missing rate
   SHAD-02-D  jaccard_at_k           — Jaccard overlap of top-k payment sets
+  SHAD-02-E  currency_breakdown     — sesgo de monto, tasa de alertas y
+             distribución de fallback_level POR MONEDA (frame-normalization-v1,
+             desviación monitoreada USD-relativa; NIO/HNL/PKR obligatorias
+             cuando tienen volumen; gate 4x señalado por moneda)
 
 Writes ONLY to local ClickHouse (ANOMALY_SCORES_CH_*).  Never touches the
 production READ target (CLICKHOUSE_*).
@@ -30,6 +34,15 @@ DEFAULT_DAYS = 30
 SHADOW_OLD = "shadow_old"
 SHADOW_NEW = "shadow_new"
 
+# SHAD-02-E (frame-normalization-v1): gate global de sesgo de monto y reglas
+# de agregación por moneda. Monedas volátiles de la desviación monitoreada
+# (proposal riesgo 1, decisión humana 5) SIEMPRE tienen fila propia si tienen
+# volumen; ninguna moneda con > OWN_ROW_MIN_N pagos puede caer bajo 'otros'.
+BIAS_GATE = 4.0
+OWN_ROW_MIN_N = 1_000
+MANDATORY_CURRENCIES = ("NIO", "HNL", "PKR")
+OTHER_BUCKET = "otros"
+
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
@@ -42,6 +55,7 @@ SELECT
     amount_usd,
     is_anomaly,
     currency,
+    fallback_level,
     frame_flags,
     payment_created_at,
     scored_at
@@ -82,6 +96,7 @@ def load_shadow_df(
                 "amount_usd",
                 "is_anomaly",
                 "currency",
+                "fallback_level",
                 "frame_flags",
                 "payment_created_at",
                 "scored_at",
@@ -222,6 +237,109 @@ def compute_off_hours(df: pd.DataFrame, model: str) -> dict:
         "tz_missing_rate": tz_missing_rate,
         "n": n,
     }
+
+
+# ---------------------------------------------------------------------------
+# SHAD-02-E: currency breakdown (frame-normalization-v1, grupo 4)
+# ---------------------------------------------------------------------------
+
+
+def _winsorized_top5_ratio(sub: pd.DataFrame) -> float:
+    """Top-5% winsorized (p99.9) amount ratio within a subset (same metric as
+    compute_top5_bias, applied per currency)."""
+    n = len(sub)
+    if n < 2:
+        return float("nan")
+    k5 = max(1, int(n * 0.05))
+    top5_idx = sub["percentile"].nlargest(k5).index
+
+    amounts = sub["amount_usd"].to_numpy(dtype=np.float64)
+    p999 = float(np.percentile(amounts, 99.9))
+    wins_all = np.clip(amounts, None, p999)
+    top5_amounts = sub.loc[top5_idx, "amount_usd"].to_numpy(dtype=np.float64)
+    wins_top5 = np.clip(top5_amounts, None, p999)
+
+    global_wins_mean = wins_all.mean()
+    if global_wins_mean <= 0:
+        return float("nan")
+    return float(wins_top5.mean() / global_wins_mean)
+
+
+def compute_currency_breakdown(
+    df: pd.DataFrame,
+    model: str = SHADOW_NEW,
+    gate: float = BIAS_GATE,
+    own_row_min_n: int = OWN_ROW_MIN_N,
+    mandatory_currencies: tuple = MANDATORY_CURRENCIES,
+) -> pd.DataFrame:
+    """SHAD-02-E: métricas por moneda para la desviación monitoreada USD-relativa.
+
+    Reglas de agregación (spec artefactos-stats — Monitoreo de sesgo por moneda):
+      - fila propia para toda moneda con n > own_row_min_n en la ventana;
+      - fila propia para las monedas volátiles obligatorias (NIO/HNL/PKR)
+        cuando tienen volumen (n > 0), sin importar el umbral;
+      - el resto se agrega bajo 'otros'.
+
+    Args:
+        df: Shadow DataFrame (requiere columnas currency, percentile,
+            amount_usd, is_anomaly, fallback_level, scoring_mode).
+        model: scoring_mode a analizar (default shadow_new).
+        gate: umbral global de sesgo de monto (default 4.0).
+        own_row_min_n: mínimo estricto de pagos para fila propia no mandatoria.
+        mandatory_currencies: monedas con fila propia obligatoria si hay volumen.
+
+    Returns:
+        DataFrame con columnas: currency, n, alerts, alert_rate,
+        top5_amount_x_avg, exceeds_gate, fallback_levels (dict de conteos).
+    """
+    columns = [
+        "currency",
+        "n",
+        "alerts",
+        "alert_rate",
+        "top5_amount_x_avg",
+        "exceeds_gate",
+        "fallback_levels",
+    ]
+    sub_model = df[df["scoring_mode"] == model]
+    if sub_model.empty:
+        return pd.DataFrame(columns=columns)
+
+    counts = sub_model.groupby("currency").size()
+    own_row = {
+        currency
+        for currency, n in counts.items()
+        if n > own_row_min_n or (currency in mandatory_currencies and n > 0)
+    }
+
+    def _row(label: str, sub: pd.DataFrame) -> dict:
+        ratio = _winsorized_top5_ratio(sub)
+        exceeds = bool(ratio > gate) if not np.isnan(ratio) else False
+        if "fallback_level" in sub.columns:
+            fallback_levels = sub["fallback_level"].value_counts().to_dict()
+        else:
+            fallback_levels = {}
+        n = len(sub)
+        alerts = int(sub["is_anomaly"].sum())
+        return {
+            "currency": label,
+            "n": n,
+            "alerts": alerts,
+            "alert_rate": alerts / n if n else float("nan"),
+            "top5_amount_x_avg": ratio,
+            "exceeds_gate": exceeds,
+            "fallback_levels": fallback_levels,
+        }
+
+    rows = [
+        _row(currency, sub_model[sub_model["currency"] == currency])
+        for currency in sorted(own_row)
+    ]
+    others = sub_model[~sub_model["currency"].isin(own_row)]
+    if not others.empty:
+        rows.append(_row(OTHER_BUCKET, others))
+
+    return pd.DataFrame(rows, columns=columns)
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +484,28 @@ def main(argv: Optional[list] = None) -> None:
     j = compute_jaccard_at_k(df, k=100)
     print(f"  Jaccard@100 = {j:.4f}")
 
+    # SHAD-02-E
+    print("\n--- SHAD-02-E: Currency breakdown (shadow_new, gate 4x) ---")
+    breakdown = compute_currency_breakdown(df)
+    if breakdown.empty:
+        print("  (no data)")
+    else:
+        for _, row in breakdown.iterrows():
+            ratio = row["top5_amount_x_avg"]
+            ratio_str = f"{ratio:.3f}x" if not np.isnan(ratio) else "N/A"
+            flag = "  << EXCEEDS 4x GATE" if row["exceeds_gate"] else ""
+            print(
+                f"  {row['currency']:<8} n={row['n']:<8} "
+                f"alert_rate={row['alert_rate']*100:.2f}%  "
+                f"top5_bias={ratio_str}  fallback={row['fallback_levels']}{flag}"
+            )
+        exceeded = breakdown[breakdown["exceeds_gate"]]["currency"].tolist()
+        if exceeded:
+            print(
+                f"  WARNING: monedas sobre el gate 4x: {exceeded} — "
+                f"activa la reapertura de la desviación monitoreada USD-relativa"
+            )
+
     metrics = {
         "days": args.days,
         "n_shadow_old": n_old,
@@ -375,6 +515,7 @@ def main(argv: Optional[list] = None) -> None:
         "off_hours_old": oh_old,
         "off_hours_new": oh_new,
         "jaccard_at_100": j,
+        "currency_breakdown": breakdown.to_dict(orient="records"),
     }
 
     if args.output_json:

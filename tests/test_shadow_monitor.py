@@ -348,6 +348,155 @@ class TestComputeAlertRateBySegment:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# SHAD-02-E: compute_currency_breakdown (frame-normalization-v1, grupo 4)
+# ---------------------------------------------------------------------------
+
+
+def _currency_df(spec: dict, seed: int = 11) -> pd.DataFrame:
+    """Build a shadow_new DataFrame from {currency: dict(n=..., ...)} spec.
+
+    Each currency spec supports:
+      n: number of rows
+      amount: base amount (default lognormal)
+      top5_amount: amount injected in the top-5% percentile rows (bias)
+      alert_frac: fraction of is_anomaly=True rows
+      fallback_levels: list to cycle through (default ['facility'])
+    """
+    rng = np.random.default_rng(seed)
+    frames = []
+    pid = 0
+    for currency, cfg in spec.items():
+        n = cfg["n"]
+        percentiles = np.linspace(0.0, 0.94, n)
+        amounts = np.full(n, float(cfg.get("amount", 10.0)))
+        if "top5_amount" in cfg:
+            k5 = max(1, int(n * 0.05))
+            # give the last k5 rows the highest percentiles and biased amounts
+            percentiles[-k5:] = np.linspace(0.95, 0.999, k5)
+            amounts[-k5:] = float(cfg["top5_amount"])
+        alert_frac = cfg.get("alert_frac", 0.0)
+        n_alerts = int(round(n * alert_frac))
+        is_anomaly = np.array([True] * n_alerts + [False] * (n - n_alerts))
+        levels = cfg.get("fallback_levels", ["facility"])
+        fallback = [levels[i % len(levels)] for i in range(n)]
+        frames.append(
+            pd.DataFrame(
+                {
+                    "payment_id": range(pid, pid + n),
+                    "scoring_mode": [SHADOW_NEW] * n,
+                    "percentile": percentiles,
+                    "amount_usd": amounts,
+                    "is_anomaly": is_anomaly,
+                    "currency": [currency] * n,
+                    "fallback_level": fallback,
+                    "frame_flags": [""] * n,
+                    "payment_created_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
+                    "scored_at": [pd.Timestamp("2026-06-15 12:00:00")] * n,
+                }
+            )
+        )
+        pid += n
+    _ = rng
+    return pd.concat(frames, ignore_index=True)
+
+
+class TestComputeCurrencyBreakdown:
+    def _breakdown(self, df, **kwargs):
+        from shadow_monitor import compute_currency_breakdown
+
+        return compute_currency_breakdown(df, **kwargs)
+
+    def test_row_per_currency_with_required_metrics(self):
+        """Cada moneda con volumen propio tiene fila con sesgo, tasa de alertas y fallback."""
+        df = _currency_df(
+            {
+                "USD": {"n": 2000, "alert_frac": 0.05},
+                "CAD": {"n": 1500, "alert_frac": 0.02},
+                "NIO": {"n": 50, "alert_frac": 0.10},
+                "HNL": {"n": 30},
+            }
+        )
+        result = self._breakdown(df)
+        currencies = set(result["currency"])
+        assert {"USD", "CAD", "NIO", "HNL"} <= currencies
+        for col in ("n", "alert_rate", "top5_amount_x_avg", "fallback_levels", "exceeds_gate"):
+            assert col in result.columns, f"columna '{col}' ausente"
+
+    def test_no_currency_above_1000_payments_under_otros(self):
+        """Ninguna moneda con >1000 pagos queda agregada bajo 'otros'."""
+        df = _currency_df(
+            {
+                "USD": {"n": 3000},
+                "MXN": {"n": 1200},  # >1000 -> fila propia obligatoria
+                "EUR": {"n": 200},  # ni mandatoria ni >1000 -> 'otros'
+            }
+        )
+        result = self._breakdown(df)
+        assert "MXN" in set(result["currency"])
+        assert "EUR" not in set(result["currency"])
+        otros = result[result["currency"] == "otros"]
+        assert len(otros) == 1
+        assert int(otros.iloc[0]["n"]) == 200
+
+    def test_mandatory_currencies_present_with_any_volume(self):
+        """NIO/HNL/PKR tienen fila propia cuando tienen volumen, aunque n<=1000."""
+        df = _currency_df({"USD": {"n": 2000}, "PKR": {"n": 10}, "NIO": {"n": 5}})
+        result = self._breakdown(df)
+        assert {"PKR", "NIO"} <= set(result["currency"])
+
+    def test_mandatory_currency_absent_without_volume(self):
+        df = _currency_df({"USD": {"n": 2000}})
+        result = self._breakdown(df)
+        assert "PKR" not in set(result["currency"])
+
+    def test_currency_exceeding_gate_is_flagged(self):
+        """Moneda con ratio de sesgo > 4x queda señalada como excedida."""
+        df = _currency_df(
+            {
+                "USD": {"n": 2000, "amount": 10.0},
+                "PKR": {"n": 1200, "amount": 10.0, "top5_amount": 1000.0},
+            }
+        )
+        result = self._breakdown(df)
+        pkr = result[result["currency"] == "PKR"].iloc[0]
+        usd = result[result["currency"] == "USD"].iloc[0]
+        assert pkr["top5_amount_x_avg"] > 4.0
+        assert bool(pkr["exceeds_gate"]) is True
+        assert bool(usd["exceeds_gate"]) is False
+
+    def test_alert_rate_computed_per_currency(self):
+        df = _currency_df({"USD": {"n": 2000, "alert_frac": 0.05}, "NIO": {"n": 100,
+                                                                           "alert_frac": 0.10}})
+        result = self._breakdown(df)
+        nio = result[result["currency"] == "NIO"].iloc[0]
+        assert nio["alert_rate"] == pytest.approx(0.10, abs=1e-9)
+
+    def test_fallback_level_distribution(self):
+        df = _currency_df(
+            {"USD": {"n": 2000, "fallback_levels": ["facility", "facility", "currency",
+                                                    "global"]}}
+        )
+        result = self._breakdown(df)
+        usd = result[result["currency"] == "USD"].iloc[0]
+        dist = usd["fallback_levels"]
+        assert dist["facility"] == 1000
+        assert dist["currency"] == 500
+        assert dist["global"] == 500
+
+    def test_empty_df_returns_empty(self):
+        df = _make_df(n_old=0, n_new=0)
+        df["fallback_level"] = pd.Series(dtype=str)
+        result = self._breakdown(df)
+        assert result.empty
+
+    def test_load_sql_includes_fallback_level(self):
+        """La query de carga del shadow monitor trae fallback_level por fila."""
+        import shadow_monitor
+
+        assert "fallback_level" in shadow_monitor._LOAD_SQL
+
+
 class TestComputeOffHours:
     def test_off_hours_rate_in_range(self):
         """Off-hours rate should be between 0 and 1."""
