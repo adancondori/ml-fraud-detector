@@ -45,7 +45,12 @@ services:
       ANOMALY_SCORES_CH_PASSWORD: ""
       ANOMALY_SCORES_CH_DATABASE: pbp_productionDB_optimized
       ANOMALY_SCORES_TABLE: pbp_productionDB_optimized.anomaly_scores
-      SCORING_MODE: shadow
+      # shadow_dual (not "shadow") is the value scorer/main.py checks to load the
+      # champion (IF-40) + challenger (frame-v1) and write 2 rows/payment. Plain
+      # "shadow" left the service in single-model (active) mode, so Fase 4
+      # dual-run never actually ran. Requires a redeploy (docker compose up -d
+      # ml-scorer) to take effect; roughly doubles batch cost.
+      SCORING_MODE: shadow_dual
     depends_on:
       clickhouse:
         condition: service_healthy

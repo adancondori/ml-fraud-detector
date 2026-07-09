@@ -158,3 +158,50 @@ def test_user_context_defaults():
     assert ctx.txn_count_24h == 0
     assert ctx.user_role == "player"
     assert ctx.categories_30d == []
+
+
+# --- Regression: empty ClickHouse result must not abort context enrichment ---
+# Bug: get_context ran 8 queries inside one try block using
+# `client.query(...).first_row`, which raises IndexError ("list index out of
+# range") on an empty result set. The first empty query aborted enrichment for
+# every subsequent field. Observed live: the warning fired for nearly every
+# user during a batch, silently degrading feature quality.
+from datetime import datetime  # noqa: E402
+
+from fraud_detector.scoring.context import UserContextProvider  # noqa: E402
+
+
+class _FakeResult:
+    """Mimics clickhouse-connect QueryResult: .first_row raises on empty."""
+
+    def __init__(self, rows):
+        self.result_rows = rows
+
+    @property
+    def first_row(self):
+        return self.result_rows[0]  # IndexError on empty — like the real client
+
+
+class _FakeClient:
+    """Returns empty for the first (velocity) query, data for behavior."""
+
+    def query(self, sql, parameters=None):
+        if sql == UserContextProvider.BEHAVIOR_SQL:
+            # (distinct_facilities_30d, distinct_methods, reversal_ratio_30d,
+            #  discount_ratio_30d, txn_count_30d)
+            return _FakeResult([(2, 3, 0.1, 0.2, 42)])
+        return _FakeResult([])  # every other query — including velocity — is empty
+
+
+def test_empty_query_does_not_abort_later_context_enrichment():
+    provider = UserContextProvider(_FakeClient())
+
+    ctx = provider.get_context(
+        user_id=999, facility_id=1, timestamp=datetime(2025, 6, 1, 12, 0, 0)
+    )
+
+    # Velocity returned empty (None), but behavior ran and populated its fields.
+    # Pre-fix this was 0 because the empty velocity query raised and aborted.
+    assert ctx.txn_count_30d == 42
+    assert ctx.distinct_facilities_30d == 2
+    assert ctx.txn_count_1h == 0  # velocity genuinely empty → default

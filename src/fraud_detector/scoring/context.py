@@ -13,6 +13,21 @@ from fraud_detector.utils.logger import logger
 AMOUNT_USD_SQL = f"(reservation_paid_out * {clickhouse_rate_case()})"
 
 
+def _first_row(result):
+    """Return the first row of a ClickHouse query result, or ``None`` if empty.
+
+    clickhouse-connect's ``QueryResult.first_row`` does ``result_rows[0]`` and
+    raises ``IndexError`` ("list index out of range") on an empty result set.
+    Because the context queries share a single ``try`` block, using ``.first_row``
+    directly meant the first query returning zero rows aborted enrichment for
+    every subsequent field. This helper degrades an empty result to ``None`` so
+    each query is independent and only genuinely-empty fields fall back to
+    their defaults.
+    """
+    rows = result.result_rows
+    return rows[0] if rows else None
+
+
 @dataclass
 class UserContext:
     """Rolling aggregates for a single user at a point in time."""
@@ -224,7 +239,7 @@ class UserContextProvider:
             client = self._client()
 
             # Velocity
-            row = client.query(self.VELOCITY_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.VELOCITY_SQL, parameters=params))
             if row:
                 ctx.txn_count_1h = int(row[0] or 0)
                 ctx.txn_count_24h = int(row[1] or 0)
@@ -232,7 +247,7 @@ class UserContextProvider:
                 ctx.last_txn_at = row[3]
 
             # Behavior
-            row = client.query(self.BEHAVIOR_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.BEHAVIOR_SQL, parameters=params))
             if row:
                 ctx.distinct_facilities_30d = int(row[0] or 0)
                 ctx.distinct_methods = int(row[1] or 0)
@@ -241,35 +256,35 @@ class UserContextProvider:
                 ctx.txn_count_30d = int(row[4] or 0)
 
             # Credit
-            row = client.query(self.CREDIT_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.CREDIT_SQL, parameters=params))
             if row:
                 ctx.debit_count_30d = int(row[0] or 0)
                 ctx.debit_amount_30d = float(row[1] or 0)
                 ctx.prepaid_spend_30d = float(row[2] or 0)
 
             # Diversity
-            row = client.query(self.DIVERSITY_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.DIVERSITY_SQL, parameters=params))
             if row:
                 ctx.categories_30d = list(row[0] or [])
                 ctx.reversal_count_30d = int(row[1] or 0)
                 ctx.merchandise_ratio_30d = float(row[2] or 0)
 
             # User info
-            row = client.query(self.USER_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.USER_SQL, parameters=params))
             if row:
                 ctx.user_created_at = row[0]
 
             # Role
-            row = client.query(self.ROLE_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.ROLE_SQL, parameters=params))
             if row and row[0]:
                 ctx.user_role = str(row[0])
 
-            row = client.query(self.SAME_AMOUNT_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.SAME_AMOUNT_SQL, parameters=params))
             if row:
                 ctx.same_amount_count_1h = float(row[0] or 0)
                 ctx.same_amount_count_24h = float(row[1] or 0)
 
-            row = client.query(self.GATEWAY_SQL, parameters=params).first_row
+            row = _first_row(client.query(self.GATEWAY_SQL, parameters=params))
             if row:
                 ctx.gateway_change_recent = float(row[0] or 0)
                 ctx.is_main_gateway = float(row[1] or 0)

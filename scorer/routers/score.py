@@ -76,8 +76,14 @@ def score_batch(
     """
     logger.info(f"POST /score/batch — cursor={request.cursor.isoformat()}")
 
+    # Dual-run wiring: when the service started in shadow_dual mode, lifespan
+    # populates _state["scorer_new"] with the frame-v1 challenger. Passing it
+    # here activates BatchScorer's dual path (2 rows/payment: shadow_old +
+    # shadow_new). In active mode the key is absent → None → single-model path,
+    # so this is backward compatible.
     batch_scorer = BatchScorer(
         scorer=scorer,
+        scorer_shadow=_deps._state.get("scorer_new"),
         read_ch_client=read_ch_client,
         write_ch_client=write_ch_client,
         anomaly_scores_table=_deps._state.get(
