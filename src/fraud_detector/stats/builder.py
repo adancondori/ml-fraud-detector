@@ -129,7 +129,7 @@ class FacilityStatsBuilder:
         facilities: dict[str, dict] = {}
         for fid, tzinfo_identifier in iana_map.items():
             # Columna replicada tal cual; vacío/None -> null (sin diccionario propio).
-            iana_tz = tzinfo_identifier if tzinfo_identifier else None
+            iana_tz = tzinfo_identifier or None
             fid_key = str(fid)
             dominant_currency = fid_currency.get(fid, "USD")
 
@@ -189,9 +189,7 @@ class FacilityStatsBuilder:
 
         return {
             "schema_version": "facility-stats-v1",
-            "built_at": datetime.datetime.now(datetime.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
+            "built_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "universe_filter": CANONICAL_UNIVERSE_FILTER,
             "stats_window_start": stats_window_start,
             "stats_window_end": stats_window_end,
