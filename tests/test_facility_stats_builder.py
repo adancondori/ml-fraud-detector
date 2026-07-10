@@ -55,6 +55,21 @@ def test_tz_mapping_module_removed():
 # ---------------------------------------------------------------------------
 
 
+def _created_at_within_window(n: int) -> pd.Series:
+    """n timestamps distribuidos dentro de la ventana canónica de test
+    (2025-01-01 .. 2025-06-30, shadow 2025-07-01), naive.
+
+    Cubre el borde inclusivo (max = 2025-06-30 23:59:54) sin tocar shadow.
+    """
+    if n <= 1:
+        return pd.to_datetime(["2025-01-01 00:00:00"][:n])
+    return pd.date_range(
+        start="2025-01-01 00:00:00",
+        end="2025-06-30 23:59:54",
+        periods=n,
+    )
+
+
 @pytest.fixture
 def synthetic_train_df():
     """Synthetic DataFrame with four facilities.
@@ -62,6 +77,9 @@ def synthetic_train_df():
     A: n=100, normal spread  -> fallback_level='facility'
     B: n=5,   n < MIN_N      -> fallback_level in {'currency','global'}
     C: n=50,  all same amount (IQR=0) -> iqr_guarded=1.0
+
+    Cada fila lleva ``created_at`` dentro de la ventana canónica de test
+    (2025-01-01 .. 2025-06-30, shadow 2025-07-01) para pasar el gate anti-fuga.
     """
     rng = np.random.default_rng(42)
     rows = []
@@ -71,7 +89,9 @@ def synthetic_train_df():
         rows.append({"facility_id": 1002, "amount": float(rng.normal(30, 5)), "currency": "USD"})
     for _ in range(50):
         rows.append({"facility_id": 1003, "amount": 25.0, "currency": "CAD"})
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["created_at"] = _created_at_within_window(len(df))
+    return df
 
 
 @pytest.fixture
@@ -176,6 +196,180 @@ def test_build_fails_if_window_inverted(
 
 
 # ---------------------------------------------------------------------------
+# Anti-fuga temporal EJECUTADO sobre created_at (change anti-fuga-builder-enforce)
+# specs/anti-fuga-stats/spec.md — cada test cita su scenario.
+# ---------------------------------------------------------------------------
+
+
+def test_build_fails_if_created_at_missing(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: falta la columna created_at.
+
+    train_df sin created_at -> ValueError accionable que nombra la columna,
+    sin producir artefacto y antes de agregar estadísticas.
+    """
+    df = synthetic_train_df.drop(columns=["created_at"])
+    with pytest.raises(ValueError, match="created_at"):
+        _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+
+def test_build_fails_if_created_at_has_nulls(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: created_at con nulos -> ValueError que indica nulos/NaT."""
+    df = synthetic_train_df.copy()
+    df.loc[df.index[0], "created_at"] = pd.NaT
+    with pytest.raises(ValueError, match="(?i)nulos|nat"):
+        _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+
+def test_build_fails_if_created_at_unparseable(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: created_at no parsea como datetime -> ValueError."""
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype(object)
+    df.loc[df.index[0], "created_at"] = "no-es-fecha"
+    with pytest.raises(ValueError, match="(?i)created_at"):
+        _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+
+def test_build_fails_if_observed_min_before_window_start(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: observed_min anterior al inicio de ventana.
+
+    Ventana 2025-01-01..2025-06-30, shadow 2025-07-01; una fila el 2024-12-31.
+    """
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[0], "created_at"] = pd.Timestamp("2024-12-31 23:00:00")
+    with pytest.raises(ValueError, match="(?i)fuera de ventana|observed_min"):
+        _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+
+def test_build_fails_if_observed_max_after_window_end_before_shadow(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: observed_max posterior al fin de ventana pero anterior al shadow.
+
+    stats_window_end=2025-06-30, shadow=2025-08-01, fila el 2025-07-15.
+    """
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[0], "created_at"] = pd.Timestamp("2025-07-15 10:00:00")
+    with pytest.raises(ValueError, match="(?i)fuera de ventana|observed_max"):
+        _build(
+            df,
+            synthetic_iana_map,
+            synthetic_fid_currency,
+            stats_window_end="2025-06-30",
+            shadow_period_start="2025-08-01",
+        )
+
+
+def test_build_passes_on_inclusive_window_end_boundary(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: borde inclusivo — máximo en el último día de la ventana PASA.
+
+    max created_at = 2025-06-30 23:59:54 -> build COMPLETA.
+    """
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[-1], "created_at"] = pd.Timestamp("2025-06-30 23:59:54")
+    stats = _build(df, synthetic_iana_map, synthetic_fid_currency)
+    assert stats["observed_max_created_at"] == "2025-06-30"
+
+
+def test_build_fails_on_shadow_boundary_instant(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: borde estricto — instante dentro del shadow FALLA.
+
+    max created_at = 2025-07-01 00:00:00 (>= shadow_period_start) -> FUGA.
+    """
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[-1], "created_at"] = pd.Timestamp("2025-07-01 00:00:00")
+    with pytest.raises(ValueError, match="(?i)fuga|shadow"):
+        _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+
+def test_build_declares_observed_provenance(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency
+):
+    """Scenario: caso feliz — build completa y declara la procedencia observada.
+
+    min=2025-01-01 00:00:00, max=2025-06-30 23:59:54 -> observed_* como
+    ISO date YYYY-MM-DD, no timestamp.
+    """
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[0], "created_at"] = pd.Timestamp("2025-01-01 00:00:00")
+    df.loc[df.index[-1], "created_at"] = pd.Timestamp("2025-06-30 23:59:54")
+    stats = _build(df, synthetic_iana_map, synthetic_fid_currency)
+    assert stats["observed_min_created_at"] == "2025-01-01"
+    assert stats["observed_max_created_at"] == "2025-06-30"
+
+
+def test_build_fails_if_train_df_empty(synthetic_iana_map, synthetic_fid_currency):
+    """RISK challenge fix: train_df con columna created_at pero 0 filas.
+
+    s.min()/s.max() dan NaT y NaT.date() vs date.fromisoformat levantaba
+    TypeError opaco. El contrato D1/D2 exige fallar barato con ValueError
+    accionable ANTES de agregar estadísticas. Debe ser el 7º mensaje de la
+    familia D2 (train_df vacío), no un TypeError.
+    """
+    from fraud_detector.stats.builder import FacilityStatsBuilder
+
+    empty = pd.DataFrame(
+        {
+            "facility_id": pd.Series([], dtype="int64"),
+            "amount": pd.Series([], dtype="float64"),
+            "currency": pd.Series([], dtype="object"),
+            "created_at": pd.Series([], dtype="datetime64[ns]"),
+        }
+    )
+    with pytest.raises(ValueError, match="(?i)vac|no hay filas"):
+        FacilityStatsBuilder().build(
+            empty, synthetic_iana_map, synthetic_fid_currency, **WINDOW_KWARGS
+        )
+
+
+def test_edge_classification_independent_of_process_tz(
+    synthetic_train_df, synthetic_iana_map, synthetic_fid_currency, monkeypatch
+):
+    """Scenario: pago de borde a las 23:30 del último día de ventana no se
+    malclasifica como fuga; resultado idéntico bajo cualquier TZ del proceso.
+
+    max created_at = 2025-06-30 23:30:00 (naive). Se corre bajo TZ=UTC y
+    TZ=America/La_Paz y se compara la salida temporal.
+    """
+    import time
+
+    df = synthetic_train_df.copy()
+    df["created_at"] = df["created_at"].astype("datetime64[ns]")
+    df.loc[df.index[-1], "created_at"] = pd.Timestamp("2025-06-30 23:30:00")
+
+    def _build_under_tz(tz_value: str):
+        monkeypatch.setenv("TZ", tz_value)
+        try:
+            time.tzset()
+        except AttributeError:  # pragma: no cover - non-POSIX
+            pass
+        return _build(df, synthetic_iana_map, synthetic_fid_currency)
+
+    stats_utc = _build_under_tz("UTC")
+    stats_lapaz = _build_under_tz("America/La_Paz")
+
+    for key in ("observed_min_created_at", "observed_max_created_at"):
+        assert stats_utc[key] == stats_lapaz[key]
+    assert stats_utc["observed_max_created_at"] == "2025-06-30"
+
+
+# ---------------------------------------------------------------------------
 # Mapping de monto fuente (scenario: universo/amount-alias-interno)
 # ---------------------------------------------------------------------------
 
@@ -196,7 +390,9 @@ def _n_rows_df(n: int, facility_id: int = 3001) -> pd.DataFrame:
         {"facility_id": facility_id, "amount": float(rng.normal(40, 8)), "currency": "USD"}
         for _ in range(n)
     ]
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["created_at"] = _created_at_within_window(len(df))
+    return df
 
 
 def test_facility_with_exactly_30_payments_gets_own_stats():
@@ -316,6 +512,7 @@ def test_currency_fallback_threshold():
         rows.append({"facility_id": 2003, "amount": float(rng.normal(50, 5)), "currency": "USD"})
 
     df = pd.DataFrame(rows)
+    df["created_at"] = _created_at_within_window(len(df))
     iana_map = {2001: "America/New_York", 2002: "America/Los_Angeles", 2003: "Etc/UTC"}
     fid_currency = {2001: "EUR", 2002: "GBP", 2003: "USD"}
 
@@ -412,6 +609,132 @@ def test_validator_rejects_missing_iana_key(validator_inputs):
 
 
 # ---------------------------------------------------------------------------
+# Validator anti-fuga: rango observado + rama legacy explícita
+# (change anti-fuga-builder-enforce, D5). specs/anti-fuga-stats/spec.md.
+# ---------------------------------------------------------------------------
+
+
+def _sample_df_with_created_at(max_ts: str, n: int = 155) -> pd.DataFrame:
+    """sample_df sintético con created_at cuyo máximo es max_ts."""
+    ts = pd.date_range(start="2025-01-01", end=max_ts, periods=n)
+    return pd.DataFrame(
+        {
+            "facility_id": [1001] * n,
+            "amount": [50.0] * n,
+            "currency": ["USD"] * n,
+            "created_at": ts,
+        }
+    )
+
+
+def test_validator_fails_if_observed_max_overlaps_shadow(validator_inputs):
+    """Scenario: validator falla si el máximo observado solapa el shadow.
+
+    observed_max_created_at=2025-07-01, stats_window_end=2025-06-30,
+    shadow=2025-07-01, sample_df máximo el 2025-07-01.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, _train_df, tz_df = validator_inputs
+    broken = json.loads(json.dumps(stats))
+    broken["observed_max_created_at"] = "2025-07-01"
+    sample_df = _sample_df_with_created_at("2025-07-01 00:00:00")
+    with pytest.raises(AssertionError, match="(?i)shadow|fuga"):
+        validate_universe_filter(broken, sample_df, tz_df)
+
+
+def test_validator_fails_if_observed_mismatch_sample_df(validator_inputs):
+    """Scenario: validator falla si observed_* no coincide con sample_df.
+
+    observed_max_created_at declarado 2025-06-30 pero sample_df máximo 2025-07-10.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, _train_df, tz_df = validator_inputs
+    sample_df = _sample_df_with_created_at("2025-07-10 00:00:00")
+    with pytest.raises(AssertionError, match="(?i)coincide|no coincide|observed"):
+        validate_universe_filter(stats, sample_df, tz_df)
+
+
+def test_validator_fails_new_artifact_sample_df_without_created_at(validator_inputs):
+    """D5: artefacto nuevo (con observed_*) pero sample_df SIN created_at ->
+    revalidación de procedencia imposible -> FALLA con mensaje accionable."""
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, train_df, tz_df = validator_inputs
+    sample_df = train_df.drop(columns=["created_at"])
+    with pytest.raises(AssertionError, match="created_at"):
+        validate_universe_filter(stats, sample_df, tz_df)
+
+
+def test_validator_legacy_artifact_without_observed_passes(validator_inputs):
+    """Scenario: artefacto legado sin observed_* no rompe.
+
+    Declara stats_window_*/shadow pero sin observed_* -> rama legacy explícita.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, train_df, tz_df = validator_inputs
+    legacy = json.loads(json.dumps(stats))
+    legacy.pop("observed_min_created_at")
+    legacy.pop("observed_max_created_at")
+    assert validate_universe_filter(legacy, train_df, tz_df) is True
+
+
+def test_validator_partial_observed_is_malformed(validator_inputs):
+    """D5: exactamente UNA clave observed_* -> malformado (no cae en legacy)."""
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, train_df, tz_df = validator_inputs
+    malformed = json.loads(json.dumps(stats))
+    malformed.pop("observed_min_created_at")  # queda solo observed_max_created_at
+    with pytest.raises(AssertionError, match="(?i)observed|malformado"):
+        validate_universe_filter(malformed, train_df, tz_df)
+
+
+def test_validator_new_artifact_window_end_not_before_shadow(validator_inputs):
+    """D5 punto 2: check stats_window_end < shadow_period_start (hoy ausente).
+
+    observed_* autoconsistente pero stats_window_end >= shadow_period_start.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, _train_df, tz_df = validator_inputs
+    broken = json.loads(json.dumps(stats))
+    # observed_max=2025-06-30 sigue dentro de la ventana y < shadow, pero la
+    # ventana declarada solapa el shadow: stats_window_end >= shadow_period_start.
+    broken["stats_window_end"] = "2025-07-15"
+    broken["shadow_period_start"] = "2025-07-01"
+    sample_df = _sample_df_with_created_at("2025-06-30 23:59:54")
+    with pytest.raises(AssertionError, match="(?i)shadow"):
+        validate_universe_filter(broken, sample_df, tz_df)
+
+
+def test_validator_legacy_artifact_window_end_not_before_shadow_rejected(
+    validator_inputs,
+):
+    """NOTE 2 challenge fix: el check de ORDEN de ventana (end < shadow,
+    metadata-only) es UNIVERSAL — aplica también a la rama legacy.
+
+    Un artefacto legado (sin observed_*) con stats_window_end >=
+    shadow_period_start es un artefacto mal formado y DEBE ser rechazado,
+    aunque omita los checks de procedencia observed_*. Esto convierte el
+    endurecimiento (antes silencioso) en contrato explícito.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    stats, train_df, tz_df = validator_inputs
+    legacy = json.loads(json.dumps(stats))
+    legacy.pop("observed_min_created_at")
+    legacy.pop("observed_max_created_at")
+    # end >= shadow: la ventana declarada solapa el shadow.
+    legacy["stats_window_end"] = "2025-07-15"
+    legacy["shadow_period_start"] = "2025-07-01"
+    with pytest.raises(AssertionError, match="(?i)shadow"):
+        validate_universe_filter(legacy, train_df, tz_df)
+
+
+# ---------------------------------------------------------------------------
 # Integration tests contra el artefacto materializado
 # ---------------------------------------------------------------------------
 
@@ -429,6 +752,13 @@ _INTEGRATION_SKIP = _STATS is None or _LEGACY_ARTIFACT or not IANA_PARQUET.exist
 _INTEGRATION_REASON = (
     "artefacto legado pre-refresco (fnv1-03) o snapshot facility_iana.parquet ausente"
 )
+
+# change anti-fuga-builder-enforce (D7): el artefacto vigente NO declara
+# observed_* (se generó bajo el gate declarativo anterior). La ausencia de
+# observed_* es la señal de "legacy para procedencia observada": el validator
+# debe tratarlo por su rama legacy SIN regenerar el artefacto. El próximo
+# refresco lo generará con observed_* y caerá en la rama estricta.
+_ARTIFACT_HAS_OBSERVED = _STATS is not None and "observed_min_created_at" in _STATS
 
 
 @pytest.mark.skipif(_INTEGRATION_SKIP, reason=_INTEGRATION_REASON)
@@ -452,9 +782,7 @@ def test_integration_facility_coverage():
 
 @pytest.mark.skipif(_INTEGRATION_SKIP, reason=_INTEGRATION_REASON)
 def test_integration_has_facility_level_entries():
-    n_facility = sum(
-        1 for e in _STATS["facilities"].values() if e["fallback_level"] == "facility"
-    )
+    n_facility = sum(1 for e in _STATS["facilities"].values() if e["fallback_level"] == "facility")
     assert n_facility > 0
 
 
@@ -476,9 +804,30 @@ def test_integration_validate_universe_filter():
     assert validate_universe_filter(_STATS, train_df, iana_df) is True
 
 
-@pytest.mark.skipif(
-    not STATS_JSON.exists(), reason="artefacto no materializado"
-)
+@pytest.mark.skipif(_STATS is None, reason="artefacto no materializado")
+def test_integration_vigente_artifact_uses_legacy_branch():
+    """D7: el artefacto vigente (sin observed_*) NO cae en la rama de artefacto
+    nuevo del validator; pasa por la rama legacy SIN regenerarse.
+
+    Se valida con un sample_df SIN created_at: si el vigente cayera en la rama
+    nueva, el validator exigiría created_at y FALLARÍA. Que pase confirma legacy.
+    """
+    from fraud_detector.stats.validator import validate_universe_filter
+
+    assert not _ARTIFACT_HAS_OBSERVED, (
+        "el artefacto vigente NO debe declarar observed_* (no se regenera en "
+        "este change); su ausencia es la señal de la rama legacy"
+    )
+    if not IANA_PARQUET.exists() or not TRAIN_PARQUET.exists():
+        pytest.skip("snapshot iana o train parquet ausente")
+    train_df = pd.read_parquet(TRAIN_PARQUET, columns=["amount", "facility_id", "currency"])
+    iana_df = pd.read_parquet(IANA_PARQUET)
+    assert "created_at" not in train_df.columns
+    # Rama legacy: no exige created_at en sample_df -> pasa sin regenerar.
+    assert validate_universe_filter(_STATS, train_df, iana_df) is True
+
+
+@pytest.mark.skipif(not STATS_JSON.exists(), reason="artefacto no materializado")
 def test_materialized_artifact_has_mandated_currencies():
     """Materialized artifact must contain the 9 mandated currency fallbacks (plan 02-01)."""
     with open(STATS_JSON) as f:

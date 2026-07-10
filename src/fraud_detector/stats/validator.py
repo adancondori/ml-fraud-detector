@@ -4,8 +4,11 @@ Checks that (contrato frame-normalization-v1, spec artefactos-stats):
   1. universe_filter string matches the canonical 4-predicate filter
      (FINAL, _peerdb_is_deleted=0, NOT IN ('reversal','free'), user_id != 0).
      Legacy strings without ``user_id != 0`` are rejected explicitly.
-  2. stats_window_start / stats_window_end are declared and non-empty
-     (anti-fuga temporal).
+  2. stats_window_start / stats_window_end are declared, parse as dates, and
+     stats_window_end < shadow_period_start (anti-fuga temporal, simétrico con
+     el builder). For NEW artifacts (con observed_*), el rango observado se
+     re-verifica contra la ventana/shadow y contra sample_df["created_at"].
+     Artefactos legados (sin observed_*) pasan por una rama legacy explícita.
   3. amount_source declares the source column mapping (must reference
      ``reservation_paid_out``; an empty or bare ``amount`` mapping is ambiguous).
   4. train_rows in the artifact matches len(sample_df) within 0.1% tolerance.
@@ -21,6 +24,8 @@ Returns True if all checks pass (convenient for scripting and testing).
 """
 
 from __future__ import annotations
+
+import datetime
 
 import pandas as pd
 
@@ -72,16 +77,42 @@ def validate_universe_filter(
         f"  expected: '{EXPECTED_UNIVERSE_FILTER}'"
     )
 
-    # 3. Ventana temporal declarada (anti-fuga)
+    # 3. Ventana temporal declarada (anti-fuga). Se parsean fechas (no strings)
+    #    y se re-verifica end < shadow_period_start (simetría con el builder).
+    #
+    #    DISTINCIÓN DE ALCANCE (challenge NOTE 2, endurecimiento declarado):
+    #    el check de ORDEN de ventana (stats_window_end < shadow_period_start)
+    #    es metadata-only y UNIVERSAL — todo artefacto bien formado, nuevo o
+    #    legacy, debe cumplirlo; un artefacto legacy con end >= shadow es un
+    #    artefacto mal formado y se rechaza aquí. En cambio, los checks de
+    #    PROCEDENCIA observed_* (rango real dentro de la ventana + coincidencia
+    #    con sample_df["created_at"], en _validate_observed_provenance) son SOLO
+    #    para artefactos nuevos (con observed_*); la rama legacy los omite.
     window_start = stats.get("stats_window_start")
     window_end = stats.get("stats_window_end")
     assert window_start and window_end, (
         f"stats_window_start/stats_window_end deben estar declaradas: "
         f"got start='{window_start}', end='{window_end}'"
     )
-    assert str(window_start) < str(window_end), (
-        f"stats_window invertida: start='{window_start}' >= end='{window_end}'"
-    )
+    start_date = datetime.date.fromisoformat(str(window_start))
+    end_date = datetime.date.fromisoformat(str(window_end))
+    assert (
+        start_date < end_date
+    ), f"stats_window invertida: start='{window_start}' >= end='{window_end}'"
+    shadow_start = stats.get("shadow_period_start")
+    if shadow_start:
+        shadow_date = datetime.date.fromisoformat(str(shadow_start))
+        assert end_date < shadow_date, (
+            f"la ventana de stats solapa el período de shadow: "
+            f"stats_window_end='{window_end}' >= shadow_period_start='{shadow_start}' "
+            f"(se exige end < shadow)"
+        )
+
+    # 3b. Procedencia temporal observada.
+    #   - Artefacto NUEVO: declara AMBAS claves observed_* -> rama estricta.
+    #   - Artefacto LEGADO: declara NINGUNA -> rama legacy explícita.
+    #   - Exactamente UNA clave -> artefacto malformado (no cae en legacy).
+    _validate_observed_provenance(stats, sample_df, shadow_start)
 
     # 4. Mapping de monto fuente declarado y no ambiguo (design D9)
     amount_source = stats.get("amount_source", "")
@@ -127,3 +158,65 @@ def validate_universe_filter(
     )
 
     return True
+
+
+def _validate_observed_provenance(
+    stats: dict,
+    sample_df: pd.DataFrame,
+    shadow_start: str | None,
+) -> None:
+    """Re-verifica la procedencia temporal observada del artefacto.
+
+    Ramifica por PRESENCIA de ambas claves observed_*:
+      - Ambas presentes (artefacto nuevo): rango observado dentro de la ventana,
+        estrictamente antes del shadow, y coincidencia con sample_df["created_at"].
+      - Ninguna (artefacto legado): rama legacy explícita; no exige observed_*.
+      - Exactamente una: artefacto malformado -> AssertionError.
+    """
+    has_min = "observed_min_created_at" in stats
+    has_max = "observed_max_created_at" in stats
+
+    if not has_min and not has_max:
+        # Rama legacy explícita: artefacto sin procedencia observada. Los checks
+        # temporales quedan limitados a la metadata declarada (ventana + shadow).
+        return
+
+    assert has_min and has_max, (
+        "artefacto malformado: declara solo una de observed_min_created_at / "
+        "observed_max_created_at; un artefacto nuevo DEBE declarar ambas "
+        "(la ausencia de ambas es la única condición de la rama legacy)"
+    )
+
+    window_start = datetime.date.fromisoformat(str(stats["stats_window_start"]))
+    window_end = datetime.date.fromisoformat(str(stats["stats_window_end"]))
+    observed_min = datetime.date.fromisoformat(str(stats["observed_min_created_at"]))
+    observed_max = datetime.date.fromisoformat(str(stats["observed_max_created_at"]))
+
+    assert observed_min >= window_start, (
+        f"observed_min_created_at fuera de ventana: "
+        f"{observed_min.isoformat()} < stats_window_start={window_start.isoformat()}"
+    )
+    if shadow_start:
+        shadow_date = datetime.date.fromisoformat(str(shadow_start))
+        assert observed_max < shadow_date, (
+            f"observed_max_created_at solapa el shadow (fuga temporal): "
+            f"{observed_max.isoformat()} >= shadow_period_start={shadow_date.isoformat()}"
+        )
+    assert observed_max <= window_end, (
+        f"observed_max_created_at fuera de ventana: "
+        f"{observed_max.isoformat()} > stats_window_end={window_end.isoformat()}"
+    )
+
+    # Coincidencia con los datos realmente pasados (ata procedencia a filas).
+    assert "created_at" in sample_df.columns, (
+        "sample_df no contiene la columna 'created_at': no puedo revalidar la "
+        "procedencia temporal de un artefacto nuevo (con observed_*)"
+    )
+    s = pd.to_datetime(sample_df["created_at"], errors="raise")
+    sample_min = s.min().date()
+    sample_max = s.max().date()
+    assert observed_min == sample_min and observed_max == sample_max, (
+        f"observed_* no coincide con sample_df['created_at']: "
+        f"declarado min={observed_min.isoformat()}/max={observed_max.isoformat()}, "
+        f"sample min={sample_min.isoformat()}/max={sample_max.isoformat()}"
+    )

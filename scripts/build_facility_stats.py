@@ -18,6 +18,7 @@ Produces:
 Run from the project root with the project venv:
   ./venv/bin/python scripts/build_facility_stats.py [--fetch-iana] [--out PATH]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -90,7 +91,9 @@ def main() -> None:
     args = parser.parse_args()
 
     print(f"Reading train parquet: {TRAIN_PARQUET}")
-    train_df = pd.read_parquet(TRAIN_PARQUET, columns=["amount", "facility_id", "currency"])
+    train_df = pd.read_parquet(
+        TRAIN_PARQUET, columns=["amount", "facility_id", "currency", "created_at"]
+    )
     print(f"  train rows: {len(train_df):,}")
 
     if args.fetch_iana:
@@ -103,15 +106,12 @@ def main() -> None:
 
     # {facility_id -> tzinfo_identifier} — columna replicada tal cual.
     iana_map: dict[int, str] = {
-        int(row["facility_id"]): str(row["tzinfo_identifier"])
-        for _, row in iana_df.iterrows()
+        int(row["facility_id"]): str(row["tzinfo_identifier"]) for _, row in iana_df.iterrows()
     }
 
     # Dominant currency per facility (mode of currency column in train)
     fid_currency: dict[int, str] = (
-        train_df.groupby("facility_id")["currency"]
-        .agg(lambda s: s.mode().iloc[0])
-        .to_dict()
+        train_df.groupby("facility_id")["currency"].agg(lambda s: s.mode().iloc[0]).to_dict()
     )
     fid_currency = {int(k): str(v) for k, v in fid_currency.items()}
 

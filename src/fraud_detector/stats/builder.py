@@ -2,7 +2,8 @@
 
 Produces a dict suitable for JSON serialization with the following top-level keys:
   schema_version, built_at, universe_filter, stats_window_start, stats_window_end,
-  shadow_period_start, amount_source, train_rows, n_facilities, min_n_threshold,
+  shadow_period_start, observed_min_created_at, observed_max_created_at,
+  amount_source, train_rows, n_facilities, min_n_threshold,
   min_currency_n_threshold, global_fallback, currency_fallbacks, facilities.
 
 The 'facilities' dict maps str(facility_id) -> entry for EVERY facility_id
@@ -79,7 +80,10 @@ class FacilityStatsBuilder:
             train_df: DataFrame filtered to the canonical scorer universe
                 (FINAL AND _peerdb_is_deleted=0 AND payment_method NOT IN
                 ('reversal','free') AND user_id != 0).
-                Required columns: amount (numeric), facility_id (int), currency (str).
+                Required columns: amount (numeric), facility_id (int),
+                currency (str), created_at (datetime, no-nulo, parseable).
+                created_at es columna REQUERIDA: el gate anti-fuga temporal
+                valida sobre las mismas filas que luego se agregan.
             iana_map: Mapping {facility_id -> tzinfo_identifier} for ALL live
                 facilities (including those absent from train_df), read from the
                 replicated ClickHouse column ``facilities.tzinfo_identifier``.
@@ -96,12 +100,24 @@ class FacilityStatsBuilder:
 
         Returns:
             A dict ready for json.dump() with schema_version='facility-stats-v1'.
+            Incluye observed_min_created_at / observed_max_created_at (ISO date
+            YYYY-MM-DD) con la procedencia temporal real de train_df.
 
         Raises:
             ValueError: si la ventana de stats solapa el período de shadow o
-                está invertida (anti-fuga temporal, spec artefactos-stats).
+                está invertida (metadata declarada), o si los datos de
+                train_df["created_at"] no pertenecen a la ventana declarada /
+                solapan el shadow (anti-fuga temporal EJECUTADO sobre datos,
+                spec anti-fuga-stats).
         """
         self._validate_window(stats_window_start, stats_window_end, shadow_period_start)
+
+        # Anti-fuga temporal EJECUTADO: validar pertenencia real de las filas
+        # ANTES de copiar/coercer amount (fallar barato sin mutar un df que se
+        # rechazará). Devuelve las fechas observadas como datetime.date.
+        observed_min, observed_max = self._validate_temporal_provenance(
+            train_df, stats_window_start, stats_window_end, shadow_period_start
+        )
 
         train_df = train_df.copy()
         train_df["amount"] = pd.to_numeric(train_df["amount"], errors="coerce")
@@ -194,6 +210,8 @@ class FacilityStatsBuilder:
             "stats_window_start": stats_window_start,
             "stats_window_end": stats_window_end,
             "shadow_period_start": shadow_period_start,
+            "observed_min_created_at": observed_min.isoformat(),
+            "observed_max_created_at": observed_max.isoformat(),
             "amount_source": amount_source,
             "train_rows": int(len(train_df)),
             "n_facilities": int(len(facilities)),
@@ -230,6 +248,95 @@ class FacilityStatsBuilder:
                 f"stats_window_end={stats_window_end} >= "
                 f"shadow_period_start={shadow_period_start} (se exige end < T)"
             )
+
+    @staticmethod
+    def _validate_temporal_provenance(
+        train_df: pd.DataFrame,
+        stats_window_start: str,
+        stats_window_end: str,
+        shadow_period_start: str,
+    ) -> tuple[datetime.date, datetime.date]:
+        """Anti-fuga temporal EJECUTADO sobre train_df["created_at"].
+
+        Verifica pertenencia REAL de las filas a la ventana declarada y
+        ausencia de solape con el shadow. Comparación date-vs-date en la
+        referencia naive del parquet (el corte train/shadow del extractor):
+        reduce created_at a .date() y compara contra date.fromisoformat(...),
+        sin tz_localize (no asume una zona no registrada). El resultado es
+        determinista e independiente de la TZ del proceso.
+
+        Returns:
+            (observed_min, observed_max) como datetime.date.
+
+        Raises:
+            ValueError: train_df vacío (0 filas), columna faltante, nulos/NaT,
+                no parseable, observed_min < stats_window_start,
+                observed_max > stats_window_end, o
+                observed_max >= shadow_period_start (fuga).
+        """
+        if len(train_df) == 0:
+            # Guarda de vaciedad: con 0 filas, s.min()/s.max() dan NaT y
+            # NaT.date() vs date.fromisoformat levantaría un TypeError opaco.
+            # El contrato D1/D2 exige fallar barato con ValueError accionable
+            # ANTES de agregar estadísticas.
+            raise ValueError(
+                "train_df vacío: no hay filas para validar procedencia "
+                "temporal (el gate anti-fuga requiere al menos una fila con created_at)"
+            )
+
+        if "created_at" not in train_df.columns:
+            raise ValueError(
+                "train_df no contiene la columna 'created_at': no puedo "
+                "garantizar anti-fuga temporal (columna requerida)"
+            )
+
+        try:
+            s = pd.to_datetime(train_df["created_at"], errors="raise")
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "created_at no es datetime ni parseable: "
+                f"dtype={train_df['created_at'].dtype}, no puedo comparar "
+                f"contra la ventana ({exc})"
+            ) from exc
+
+        n_null = int(s.isna().sum())
+        if n_null > 0:
+            raise ValueError(
+                f"created_at contiene {n_null} nulos/NaT: no puedo validar "
+                "pertenencia temporal de esas filas"
+            )
+
+        start = datetime.date.fromisoformat(stats_window_start)
+        end = datetime.date.fromisoformat(stats_window_end)
+        shadow_start = datetime.date.fromisoformat(shadow_period_start)
+
+        observed_min = s.min().date()
+        observed_max = s.max().date()
+
+        if observed_min < start:
+            raise ValueError(
+                "created_at fuera de ventana: "
+                f"observed_min={observed_min.isoformat()} < "
+                f"stats_window_start={stats_window_start}"
+            )
+        # El solape con shadow (fuga) es la condición más severa y específica:
+        # se comprueba antes que el fin de ventana genérico. Como _validate_window
+        # ya garantiza end < shadow, un observed_max >= shadow es también > end,
+        # pero el mensaje de fuga es el accionable correcto (spec: borde estricto).
+        if observed_max >= shadow_start:
+            raise ValueError(
+                "FUGA TEMPORAL: "
+                f"observed_max={observed_max.isoformat()} >= "
+                f"shadow_period_start={shadow_period_start} (train solapa shadow)"
+            )
+        if observed_max > end:
+            raise ValueError(
+                "created_at fuera de ventana: "
+                f"observed_max={observed_max.isoformat()} > "
+                f"stats_window_end={stats_window_end}"
+            )
+
+        return observed_min, observed_max
 
     def _compute_global_fallback(self, train_df: pd.DataFrame) -> dict:
         """Compute magnitude stats across all rows in train_df."""
