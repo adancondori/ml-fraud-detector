@@ -1,0 +1,142 @@
+{
+  "meta": {
+    "scores_path": "/Users/eidan/Documentation/Personal/Master/Perfil/ml-fraud-detector/output/revision/test_scores_v2.parquet",
+    "n": 2517488,
+    "n_bootstrap": 1000,
+    "clustered_bootstrap": false,
+    "random_seed": 42,
+    "note": "Variante por transacción pre-registrada (contrato A16); complementa el clustered de v2_confirmatory_scoreboard.json"
+  },
+  "cluster_diagnostics": {
+    "card_testing": {
+      "n_positives": 12992,
+      "n_unique_users_positive": 1789,
+      "top_user_share_of_positives": 0.04087130541871921,
+      "top5_users_share_of_positives": 0.14354987684729065,
+      "n_users_total": 406790
+    },
+    "velocity_extreme": {
+      "n_positives": 10165,
+      "n_unique_users_positive": 18,
+      "top_user_share_of_positives": 0.6446630595179538,
+      "top5_users_share_of_positives": 0.8770290211510083,
+      "n_users_total": 406790
+    },
+    "new_user_burst": {
+      "n_positives": 3142,
+      "n_unique_users_positive": 1001,
+      "top_user_share_of_positives": 0.10661998726925526,
+      "top5_users_share_of_positives": 0.21164863144493953,
+      "n_users_total": 406790
+    },
+    "typed_union": {
+      "n_positives": 25101,
+      "n_unique_users_positive": 2651,
+      "top_user_share_of_positives": 0.266244372734154,
+      "top5_users_share_of_positives": 0.3920959324329708,
+      "n_users_total": 406790
+    },
+    "refund_negative_control": {
+      "n_positives": 158716,
+      "n_unique_users_positive": 71838,
+      "top_user_share_of_positives": 0.001039592731671665,
+      "top5_users_share_of_positives": 0.004473399027193225,
+      "n_users_total": 406790
+    }
+  },
+  "top1pct_composition": {
+    "_meta": {
+      "k": 25175.0
+    },
+    "card_testing": {
+      "hits_in_top1pct": 723.0,
+      "pct_of_top1pct": 0.02871896722939424,
+      "pct_of_type_captured": 0.05564963054187192
+    },
+    "velocity_extreme": {
+      "hits_in_top1pct": 508.0,
+      "pct_of_top1pct": 0.020178748758689177,
+      "pct_of_type_captured": 0.049975405804230204
+    },
+    "new_user_burst": {
+      "hits_in_top1pct": 47.0,
+      "pct_of_top1pct": 0.0018669314796425024,
+      "pct_of_type_captured": 0.014958625079567155
+    },
+    "typed_union": {
+      "hits_in_top1pct": 1200.0,
+      "pct_of_top1pct": 0.047666335650446874,
+      "pct_of_type_captured": 0.04780686028445082
+    },
+    "refund_negative_control": {
+      "hits_in_top1pct": 1854.0,
+      "pct_of_top1pct": 0.07364448857994042,
+      "pct_of_type_captured": 0.011681241966783436
+    }
+  },
+  "per_txn_bootstrap": {
+    "card_testing": {
+      "ef_at_1pct": 5.56493652804751,
+      "ef_at_1pct_ci_low": 5.1011170522762095,
+      "ef_at_1pct_ci_high": 5.890102229067768,
+      "ef_at_5pct": 2.909468890182515,
+      "ef_at_5pct_ci_low": 2.789997595249145,
+      "ef_at_5pct_ci_high": 3.028756659086678
+    },
+    "velocity_extreme": {
+      "ef_at_1pct": 4.997516758978347,
+      "ef_at_1pct_ci_low": 4.53743149014163,
+      "ef_at_1pct_ci_high": 5.403269730598045,
+      "ef_at_5pct": 1.6704298143199277,
+      "ef_at_5pct_ci_low": 1.5749459802029546,
+      "ef_at_5pct_ci_high": 1.7829736430752372
+    },
+    "new_user_burst": {
+      "ef_at_1pct": 1.4958553777282764,
+      "ef_at_1pct_ci_low": 1.1149817146567587,
+      "ef_at_1pct_ci_high": 1.9798672260744086,
+      "ef_at_5pct": 1.7695650851423865,
+      "ef_at_5pct_ci_low": 1.5820099367913136,
+      "ef_at_5pct_ci_high": 1.9694986493257023
+    },
+    "typed_union": {
+      "ef_at_1pct": 4.780663240666595,
+      "ef_at_1pct_ci_low": 4.494180986864897,
+      "ef_at_1pct_ci_high": 5.0176348308849885,
+      "ef_at_5pct": 2.245318168699744,
+      "ef_at_5pct_ci_low": 2.170789881960395,
+      "ef_at_5pct_ci_high": 2.317655073883487
+    },
+    "refund_negative_control": {
+      "ef_at_1pct": 1.1681186286583396,
+      "ef_at_1pct_ci_low": 1.1159758384275704,
+      "ef_at_1pct_ci_high": 1.2162963171032122,
+      "ef_at_5pct": 1.1472008624925052,
+      "ef_at_5pct_ci_low": 1.1253713052248433,
+      "ef_at_5pct_ci_high": 1.1694122578703992
+    }
+  },
+  "he2_verdicts": {
+    "per_txn": {
+      "types_passing": [
+        "card_testing",
+        "velocity_extreme"
+      ],
+      "n_passing": 2,
+      "gate_satisfied": true
+    }
+  },
+  "card_testing_per_seed": {
+    "score_seed43": {
+      "ef_at_1pct": 6.6886996443613915,
+      "ef_at_1pct_ci_low": 6.259881816926086,
+      "ef_at_1pct_ci_high": 7.1248708314501625
+    },
+    "score_seed44": {
+      "ef_at_1pct": 6.6886996443613915,
+      "ef_at_1pct_ci_low": 6.253182654997576,
+      "ef_at_1pct_ci_high": 7.081364761289774
+    }
+  },
+  "elapsed_seconds": 2573.7
+}
