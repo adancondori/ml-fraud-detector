@@ -126,12 +126,17 @@ def _to_bool(mask, is_frame: bool):
 
 
 def card_testing(obj: _Input):
-    """Card testing: ráfaga de mismo monto en 1h O ráfaga de fallos por token.
+    """Card testing: ráfaga de mismo monto en 1h O ráfaga de fallos.
 
     Campos externos: ``same_amount_count_1h`` (conteo de pagos del mismo monto
     del usuario en la última hora, excluyendo la fila actual) y ``failed_count_1h``
-    (conteo de fallos por ``user_token_id`` en 1h, derivado de
-    ``failed_payment_logs``). Ambos son externos a FRAME_V1_FEATURE_NAMES.
+    (conteo de fallos en la ventana [t-1h, t], derivado de
+    ``failed_payment_logs``). DESVIACIÓN DECLARADA: la definición prerregistrada
+    contaba fallos por ``user_token_id``; la implementación ejecutada agrega por
+    ``user_id`` porque el conjunto de evaluación no conserva el token (ver
+    ``build_v2_scores.compute_failed_count_1h`` y la limitación correspondiente
+    en la tesis; la rama aporta ~3,4% de los positivos del tipo en test).
+    Ambos campos son externos a FRAME_V1_FEATURE_NAMES.
 
     Dispara si ``same_amount_count_1h >= CARD_TESTING_SAME_AMOUNT_MIN`` (5) o
     ``failed_count_1h >= CARD_TESTING_FAILED_MIN`` (5).

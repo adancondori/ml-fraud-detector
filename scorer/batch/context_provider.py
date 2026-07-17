@@ -149,7 +149,7 @@ class BatchContextProvider:
                 AND p.created_at < v.ts
             ) AS amount_24h,
             max(CASE WHEN p.created_at < v.ts THEN p.created_at ELSE NULL END) AS last_txn_at
-        FROM pbp_productionDB_optimized.payments FINAL AS p
+        FROM pbp_productionDB_optimized.payments AS p FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64, facility_id UInt32, ts DateTime',
@@ -192,7 +192,7 @@ class BatchContextProvider:
             sumIf({P_DISCOUNT_USD_SQL}, 1=1) / greatest(sumIf({P_AMOUNT_USD_SQL}, 1=1), 0.01)
                 AS discount_ratio_30d,
             count() AS txn_count_30d
-        FROM pbp_productionDB_optimized.payments FINAL AS p
+        FROM pbp_productionDB_optimized.payments AS p FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64, facility_id UInt32, ts DateTime',
@@ -233,7 +233,7 @@ class BatchContextProvider:
             countIf(p.category = 'debit') AS debit_count_30d,
             sumIf({P_AMOUNT_USD_SQL}, p.category = 'debit') AS debit_amount_30d,
             sumIf({P_AMOUNT_USD_SQL}, p.payment_method = 'prepaid') AS prepaid_spend_30d
-        FROM pbp_productionDB_optimized.payments FINAL AS p
+        FROM pbp_productionDB_optimized.payments AS p FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64, facility_id UInt32, ts DateTime',
@@ -273,7 +273,7 @@ class BatchContextProvider:
                 AS reversal_count_30d,
             countIf(p.category = 'merchandise') * 1.0
                 / greatest(count(), 1) AS merchandise_ratio_30d
-        FROM pbp_productionDB_optimized.payments FINAL AS p
+        FROM pbp_productionDB_optimized.payments AS p FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64, facility_id UInt32, ts DateTime',
@@ -312,7 +312,7 @@ class BatchContextProvider:
         SELECT
             u.id AS user_id,
             u.created_at AS user_created_at
-        FROM pbp_productionDB_optimized.users FINAL AS u
+        FROM pbp_productionDB_optimized.users AS u FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64',
@@ -346,7 +346,7 @@ class BatchContextProvider:
             fu.user_id,
             fu.facility_id,
             fu.role
-        FROM pbp_productionDB_optimized.facilities_users FINAL AS fu
+        FROM pbp_productionDB_optimized.facilities_users AS fu FINAL
         INNER JOIN (
             SELECT * FROM VALUES(
                 'user_id UInt64, facility_id UInt32, ts DateTime',
